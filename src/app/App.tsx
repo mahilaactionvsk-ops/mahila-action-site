@@ -388,7 +388,7 @@ function Footer({ setPage }: { setPage: (p: Page) => void }) {
                 Donate For The Cause
               </button>
               <button
-                onClick={showComingSoonModal}
+                onClick={() => openModal("volunteer")}
                 className={`${inter()} border-2 border-[#f4efe7] text-[#f4efe7] text-[15px] font-bold px-10 py-3 rounded-full hover:bg-[#f4efe7]/10 transition-colors cursor-pointer text-center`}
               >
                 Join The Movement
@@ -1832,7 +1832,7 @@ function HomePage({ setPage }: { setPage: (p: Page) => void }) {
               <p>Communities.</p>
             </div>
             <button
-              onClick={showComingSoonModal}
+              onClick={() => openModal("volunteer")}
               className="bg-[#f4efe7] text-[#a65a4a] font-['Inter',sans-serif] font-semibold w-full text-center rounded-full hover:bg-white transition-colors cursor-pointer"
               style={{ fontSize: "clamp(10px,1vw,15px)", padding: "clamp(5px,1vw,10px) 0" }}
             >
