@@ -680,10 +680,10 @@ const VOLUNTEER_EVENTS = [
   },
 ];
 
-function VolunteerPortal({ onClose, initialStep, resetToken }: { onClose: () => void; initialStep?: VolAuthStep; resetToken?: string }) {
+function VolunteerPortal({ onClose, initialStep, resetToken, events }: { onClose: () => void; initialStep?: VolAuthStep; resetToken?: string; events: EventItem[] }) {
   const [step, setStep] = useState<VolAuthStep>(initialStep ?? "choice");
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
-  const [selectedEvents, setSelectedEvents] = useState<number[]>([]);
+  const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
   const [filter, setFilter] = useState<"all" | "ongoing" | "upcoming">("all");
   const [confirmed, setConfirmed] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
@@ -761,7 +761,7 @@ function VolunteerPortal({ onClose, initialStep, resetToken }: { onClose: () => 
     setStep("login");
   }
 
-  function toggleEvent(id: number) {
+  function toggleEvent(id: string) {
     setSelectedEvents(prev =>
       prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]
     );
@@ -769,7 +769,7 @@ function VolunteerPortal({ onClose, initialStep, resetToken }: { onClose: () => 
 
   async function handleConfirm() {
     if (selectedEvents.length === 0) return toast.error("Please select at least one event");
-    const eventTitles = VOLUNTEER_EVENTS.filter(e => selectedEvents.includes(e.id)).map(e => e.title);
+    const eventTitles = realEvents.filter(e => selectedEvents.includes(e.id)).map(e => e.title);
     const ok = await saveVolunteer({
       name: profile?.name ?? "",
       email: profile?.email ?? "",
@@ -781,7 +781,20 @@ function VolunteerPortal({ onClose, initialStep, resetToken }: { onClose: () => 
     setConfirmed(true);
   }
 
-  const filtered = VOLUNTEER_EVENTS.filter(e => filter === "all" || e.status === filter);
+  const now = new Date();
+  const realEvents = events
+    .filter((ev) => ev.windows.some((w) => w.enabled && new Date(w.regEnd) >= now)) // don't show closed events
+    .map((ev) => ({
+      id: ev.id,
+      status: (isEventOpen(ev, now) ? "ongoing" : "upcoming") as "ongoing" | "upcoming",
+      title: ev.title,
+      date: new Date(ev.eventDate).toLocaleDateString(),
+      location: ev.location,
+      category: "", // your Event type doesn't carry a display-ready category name — see note below
+      slots: ev.totalSeats,
+      desc: ev.description,
+    }));
+  const filtered = realEvents.filter(e => filter === "all" || e.status === filter);
   const categoryColors: Record<string, string> = {
     "Women & Leadership": "bg-rose-100 text-rose-700",
     "Community Wellbeing": "bg-green-100 text-green-700",
@@ -998,7 +1011,7 @@ function VolunteerPortal({ onClose, initialStep, resetToken }: { onClose: () => 
                   </p>
                   <div className="w-full bg-white rounded-2xl p-5 text-left">
                     <p className="font-['Inter',sans-serif] text-[12px] font-semibold text-[#1e1e1e]/50 uppercase tracking-wider mb-3">Your Events</p>
-                    {VOLUNTEER_EVENTS.filter(e => selectedEvents.includes(e.id)).map(e => (
+                    {realEvents.filter(e => selectedEvents.includes(e.id)).map(e => (
                       <div key={e.id} className="flex items-start gap-3 py-2.5 border-b border-[#a65a4a]/10 last:border-0">
                         <CheckCircle size={16} className="text-[#587735] mt-0.5 shrink-0" />
                         <div>
@@ -1648,6 +1661,7 @@ function GlobalModals() {
         onClose={closeModal}
         initialStep={modalKind === "reset" ? "reset" : undefined}
         resetToken={modalKind === "reset" ? (modalId ?? undefined) : undefined}
+        events={siteData.events}
       />
     );
   }
