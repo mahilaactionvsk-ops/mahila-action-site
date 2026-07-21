@@ -32,8 +32,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build static site (client only)
-        run: npm run build:client
+      - name: Build (client + SSR prerender + sitemap)
+        run: npm run build
         env:
           # Point this at your deployed /server API (see server/README.md).
           # Set the real value in Settings → Secrets and variables → Actions → Variables.
