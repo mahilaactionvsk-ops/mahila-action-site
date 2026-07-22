@@ -1034,7 +1034,7 @@ function VolunteerPortal({ onClose, initialStep, resetToken, events }: { onClose
                     You're Registered!
                   </h4>
                   <p className="font-['Inter',sans-serif] text-[#1e1e1e]/65 text-[15px] leading-relaxed max-w-[400px]">
-                    Thank you, <strong className="text-[#a65a4a]">{profile?.name}</strong>! You've signed up for <strong className="text-[#a65a4a]">{selectedEvents.length} event{selectedEvents.length > 1 ? "s" : ""}</strong>. A confirmation will be sent to <strong className="text-[#a65a4a]">{profile?.email}</strong>.
+                    Thank you, <strong className="text-[#a65a4a]">{profile?.name}</strong>! You've signed up for <strong className="text-[#a65a4a]">{selectedEvents.length} event{selectedEvents.length > 1 ? "s" : ""}</strong>.
                   </p>
                   <div className="w-full bg-white rounded-2xl p-5 text-left">
                     <p className="font-['Inter',sans-serif] text-[12px] font-semibold text-[#1e1e1e]/50 uppercase tracking-wider mb-3">Your Events</p>
