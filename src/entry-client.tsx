@@ -23,7 +23,7 @@ const rootEl = document.getElementById("root")!;
 // Prerendered pages ship real markup inside #root (see scripts/prerender.mjs),
 // so hydrate instead of blowing it away with a fresh client render — that's
 // what makes this a real static HTML page rather than a blank-shell SPA.
-if (rootEl.hasChildNodes()) {
+if (rootEl.children.length > 0) {
   hydrateRoot(rootEl, app);
 } else {
   createRoot(rootEl).render(app);

@@ -38,8 +38,6 @@ import {
   Menu,
   X,
   CheckCircle,
-  CreditCard,
-  Smartphone,
   ChevronRight,
 } from "lucide-react";
 
@@ -99,8 +97,6 @@ function c(content: ContentMap, key: keyof ContentMap) {
 // ── Site data (CMS) context ─────────────────────────────────────────────────
 const SiteDataContext = createContext<SiteData>(DEFAULT_SITE_DATA);
 function useSiteData() { return useContext(SiteDataContext); }
-type DonationType = "one-time" | "monthly";
-type PayMethod = "card" | "upi" | "netbanking";
 type VolAuthStep = "choice" | "login" | "register" | "forgot" | "reset" | "dashboard";
 
 interface VolunteerProfile {
@@ -382,7 +378,7 @@ function Footer({ setPage }: { setPage: (p: Page) => void }) {
             </div>
             <div className="flex flex-col gap-3">
               <button
-                onClick={showComingSoonModal}
+                onClick={() => nav("donate")}
                 className={`${inter()} bg-[#f4efe7] text-[#a65a4a] text-[15px] font-bold px-10 py-3 rounded-full hover:bg-white transition-colors cursor-pointer text-center`}
               >
                 Donate For The Cause
@@ -423,19 +419,19 @@ function Footer({ setPage }: { setPage: (p: Page) => void }) {
                 className={`${inter()} text-[#f4efe7]/80 text-[13px] flex flex-col gap-2`}
               >
                 <button
-                  onClick={showComingSoonModal}
+                  onClick={() => openModal("attend")}
                   className="text-left hover:text-[#f4efe7] transition-colors cursor-pointer"
                 >
                   Attend Events
                 </button>
                 <button
-                  onClick={showComingSoonModal}
+                  onClick={() => openModal("partner")}
                   className="text-left hover:text-[#f4efe7] transition-colors cursor-pointer"
                 >
                   Partner With Us
                 </button>
                 <button
-                  onClick={showComingSoonModal}
+                  onClick={() => openModal("volunteer")}
                   className="text-left hover:text-[#f4efe7] transition-colors cursor-pointer"
                 >
                   Volunteer
@@ -683,8 +679,9 @@ const VOLUNTEER_EVENTS = [
 function VolunteerPortal({ onClose, initialStep, resetToken, events }: { onClose: () => void; initialStep?: VolAuthStep; resetToken?: string; events: EventItem[] }) {
   const [step, setStep] = useState<VolAuthStep>(initialStep ?? "choice");
   const [profile, setProfile] = useState<VolunteerProfile | null>(null);
-  const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
+
   const [filter, setFilter] = useState<"all" | "ongoing" | "upcoming">("all");
+  const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
   const [confirmed, setConfirmed] = useState(false);
   const [authBusy, setAuthBusy] = useState(false);
 
@@ -704,6 +701,35 @@ function VolunteerPortal({ onClose, initialStep, resetToken, events }: { onClose
   const inputCls = `w-full border-2 border-[#a65a4a]/25 bg-[#f4efe7] rounded-xl px-4 py-3 text-[14px] text-[#1e1e1e] placeholder-[#1e1e1e]/35 focus:outline-none focus:border-[#a65a4a] transition-colors font-['Inter',sans-serif]`;
   const labelCls = `font-['Inter',sans-serif] text-[11px] font-semibold text-[#1e1e1e]/55 uppercase tracking-wider mb-1 block`;
 
+  // Auto sign-out from the volunteer dashboard after 5 minutes of no
+  // mouse/keyboard/touch/scroll activity — mirrors AdminPage's inactivity
+  // logout further down in this same file.
+  useEffect(() => {
+    if (!profile) return;
+    const INACTIVITY_LIMIT_MS = 5 * 60 * 1000;
+    let timer: ReturnType<typeof setTimeout>;
+
+    function resetTimer() {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        setProfile(null);
+        setStep("choice");
+        setConfirmed(false);
+        setSelectedEvents([]);
+        toast.error("Signed out automatically after 5 minutes of inactivity");
+      }, INACTIVITY_LIMIT_MS);
+    }
+
+    const activityEvents = ["mousemove", "mousedown", "keydown", "touchstart", "scroll"];
+    activityEvents.forEach((ev) => window.addEventListener(ev, resetTimer));
+    resetTimer();
+
+    return () => {
+      clearTimeout(timer);
+      activityEvents.forEach((ev) => window.removeEventListener(ev, resetTimer));
+    };
+  }, [profile]);
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     if (!loginEmail.includes("@")) return toast.error("Enter a valid email");
@@ -715,6 +741,7 @@ function VolunteerPortal({ onClose, initialStep, resetToken, events }: { onClose
     setProfile(result.profile);
     setStep("dashboard");
   }
+
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
@@ -1205,20 +1232,18 @@ function VolunteerReserveForm({ event, onClose }: { event: EventItem; onClose: (
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    return showComingSoonModal();
-    // ── Original logic (restore by deleting the line above) ──
-    // if (!name.trim()) return toast.error("Please enter your full name");
-    // if (!email.trim() || !email.includes("@")) return toast.error("Please enter a valid email");
-    // if (!phone.trim()) return toast.error("Please enter your phone number");
-    // for (const c of companions) {
-    //   if (!c.name.trim() || !c.phone.trim()) return toast.error("Please enter the name and phone number for each additional volunteer");
-    // }
-    // const ok = await saveReservation({
-    //   name, email, phone, seats: Number(seats), event_name: event.title,
-    //   volunteer_commitment: commitment, companions,
-    // });
-    // if (!ok) return toast.error("Something went wrong submitting your registration — please try again.");
-    // setSubmitted(true);
+    if (!name.trim()) return toast.error("Please enter your full name");
+    if (!email.trim() || !email.includes("@")) return toast.error("Please enter a valid email");
+    if (!phone.trim()) return toast.error("Please enter your phone number");
+    for (const c of companions) {
+      if (!c.name.trim() || !c.phone.trim()) return toast.error("Please enter the name and phone number for each additional volunteer");
+    }
+    const ok = await saveReservation({
+      name, email, phone, seats: Number(seats), event_name: event.title,
+      volunteer_commitment: commitment, companions,
+    });
+    if (!ok) return toast.error("Something went wrong submitting your registration — please try again.");
+    setSubmitted(true);
   }
 
   if (submitted) {
@@ -1231,8 +1256,7 @@ function VolunteerReserveForm({ event, onClose }: { event: EventItem; onClose: (
           Seat Reserved!
         </h4>
         <p className={`font-['Inter',sans-serif] text-[#1e1e1e]/70 text-[15px] leading-relaxed`}>
-          Thank you, <strong className="text-[#a65a4a]">{name}</strong>! Your {seats} seat{Number(seats) > 1 ? "s have" : " has"} been reserved as {commitment === "ongoing" ? "an ongoing volunteer" : "a volunteer for this event only"}. A confirmation will be sent to <strong className="text-[#a65a4a]">{email}</strong>.
-        </p>
+          Thank you, <strong className="text-[#a65a4a]">{name}</strong>! Your {seats} seat{Number(seats) > 1 ? "s have" : " has"} been reserved as {commitment === "ongoing" ? "an ongoing volunteer" : "a volunteer for this event only"}. </p>
         <button onClick={onClose} className={`font-['Inter',sans-serif] w-full bg-[#a65a4a] text-[#f4efe7] text-[16px] font-semibold py-3.5 rounded-full mt-2 hover:bg-[#993925] transition-colors cursor-pointer`}>
           Done
         </button>
@@ -1326,19 +1350,17 @@ function VendorReserveForm({ event, onClose }: { event: EventItem; onClose: () =
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    return showComingSoonModal();
-    // ── Original logic (restore by deleting the line above) ──
-    // if (!businessName.trim()) return toast.error("Please enter your business or organization name");
-    // if (!contactName.trim()) return toast.error("Please enter a contact person's name");
-    // if (!email.trim() || !email.includes("@")) return toast.error("Please enter a valid email");
-    // if (!phone.trim()) return toast.error("Please enter your phone number");
-    // if (!offering.trim()) return toast.error("Please describe what you'd like to offer");
-    // const ok = await saveVendor({
-    //   business_name: businessName, contact_name: contactName, email, phone,
-    //   offering, needs_space: needsSpace, event_name: event.title,
-    // });
-    // if (!ok) return toast.error("Something went wrong submitting your application — please try again.");
-    // setSubmitted(true);
+    if (!businessName.trim()) return toast.error("Please enter your business or organization name");
+    if (!contactName.trim()) return toast.error("Please enter a contact person's name");
+    if (!email.trim() || !email.includes("@")) return toast.error("Please enter a valid email");
+    if (!phone.trim()) return toast.error("Please enter your phone number");
+    if (!offering.trim()) return toast.error("Please describe what you'd like to offer");
+    const ok = await saveVendor({
+      business_name: businessName, contact_name: contactName, email, phone,
+      offering, needs_space: needsSpace, event_name: event.title,
+    });
+    if (!ok) return toast.error("Something went wrong submitting your application — please try again.");
+    setSubmitted(true);
   }
 
   if (submitted) {
@@ -1351,7 +1373,7 @@ function VendorReserveForm({ event, onClose }: { event: EventItem; onClose: () =
           Application Received!
         </h4>
         <p className={`font-['Inter',sans-serif] text-[#1e1e1e]/70 text-[15px] leading-relaxed`}>
-          Thank you, <strong className="text-[#a65a4a]">{businessName}</strong>! We'll reach out to <strong className="text-[#a65a4a]">{email}</strong> to confirm details for {event.title}.
+          Thank you, <strong className="text-[#a65a4a]">{businessName}</strong>! Your application to partner with us for {event.title} has been received.
         </p>
         <button onClick={onClose} className={`font-['Inter',sans-serif] w-full bg-[#a65a4a] text-[#f4efe7] text-[16px] font-semibold py-3.5 rounded-full mt-2 hover:bg-[#993925] transition-colors cursor-pointer`}>
           Done
@@ -1463,7 +1485,7 @@ function AttendEventForm({
           You're All Set!
         </h4>
         <p className={`font-['Inter',sans-serif] text-[#1e1e1e]/70 text-[15px] leading-relaxed`}>
-          Thank you, <strong className="text-[#a65a4a]">{name}</strong>! {members} attendee{Number(members) > 1 ? "s are" : " is"} confirmed for <strong className="text-[#a65a4a]">{selectedEvent?.title}</strong>. A confirmation will be sent to <strong className="text-[#a65a4a]">{email}</strong>.
+          Thank you, <strong className="text-[#a65a4a]">{name}</strong>! {members} attendee{Number(members) > 1 ? "s are" : " is"} confirmed for <strong className="text-[#a65a4a]">{selectedEvent?.title}</strong>.
         </p>
         <button onClick={onClose} className={`font-['Inter',sans-serif] w-full bg-[#a65a4a] text-[#f4efe7] text-[16px] font-semibold py-3.5 rounded-full mt-2 hover:bg-[#993925] transition-colors cursor-pointer`}>
           Done
@@ -1744,11 +1766,9 @@ function HomePage({ setPage }: { setPage: (p: Page) => void }) {
   const eventOpen = featuredEvent ? isEventOpen(featuredEvent) : false;
 
   function handleReserveClick() {
-    return showComingSoonModal();
-    // ── Original logic (restore by deleting the line above) ──
-    // if (!featuredEvent) return;
-    // if (eventOpen) openModal("reserve", { id: featuredEvent.id });
-    // else openModal("closed");
+    if (!featuredEvent) return;
+    if (eventOpen) openModal("reserve", { id: featuredEvent.id });
+    else openModal("closed");
   }
 
   return (
@@ -2191,7 +2211,10 @@ function HomePage({ setPage }: { setPage: (p: Page) => void }) {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center mt-8">
             <button
-              onClick={showComingSoonModal}
+              onClick={() => {
+                setPage("donate");
+                window.scrollTo({ top: 0 });
+              }}
               className={`${inter()} bg-[#f4efe7] text-[#a65a4a] text-[17px] font-bold px-10 py-4 rounded-full hover:bg-white transition-colors cursor-pointer`}
             >
               Donate Now
@@ -2569,6 +2592,14 @@ function StoriesPage({ setPage }: { setPage: (p: Page) => void }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // PAYMENT MODAL
 // ═══════════════════════════════════════════════════════════════════════════
+// ── QR-code images for the payment screen — replace these two lines with
+// your own uploaded QR screenshots once you're ready to go live. Swap the
+// placeholder URL for a real image import (the same way imgHeroCard,
+// imgLogo, etc. are imported near the top of this file), or a direct URL
+// to your hosted QR image.
+const GPAY_QR_IMAGE = "https://placehold.co/320x320/f4efe7/1e1e1e?text=Google+Pay+QR";
+const PHONEPE_QR_IMAGE = "https://placehold.co/320x320/f4efe7/1e1e1e?text=PhonePe+QR";
+
 function PaymentModal({
   amount,
   name,
@@ -2582,313 +2613,91 @@ function PaymentModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const [method, setMethod] = useState<PayMethod>("card");
-  const [cardNum, setCardNum] = useState("");
-  const [expiry, setExpiry] = useState("");
-  const [cvv, setCvv] = useState("");
-  const [upi, setUpi] = useState("");
-  const [bank, setBank] = useState("SBI");
-  const [processing, setProcessing] = useState(false);
+  const [qrMethod, setQrMethod] = useState<"gpay" | "phonepe">("gpay");
+  const [confirming, setConfirming] = useState(false);
 
-  function formatCard(v: string) {
-    return v
-      .replace(/\D/g, "")
-      .slice(0, 16)
-      .replace(/(.{4})/g, "$1 ")
-      .trim();
-  }
-  function formatExpiry(v: string) {
-    const digits = v.replace(/\D/g, "").slice(0, 4);
-    return digits.length > 2
-      ? `${digits.slice(0, 2)}/${digits.slice(2)}`
-      : digits;
-  }
-
-  function handlePay() {
-    if (method === "card") {
-      if (cardNum.replace(/\s/g, "").length < 16)
-        return toast.error(
-          "Enter a valid 16-digit card number",
-        );
-      if (expiry.length < 5)
-        return toast.error("Enter a valid expiry date");
-      if (cvv.length < 3)
-        return toast.error("Enter a valid CVV");
-    } else if (method === "upi") {
-      if (!upi.includes("@"))
-        return toast.error(
-          "Enter a valid UPI ID (e.g. name@upi)",
-        );
-    }
-
-    setProcessing(true);
+  function handleConfirmPaid() {
+    setConfirming(true);
     setTimeout(() => {
-      setProcessing(false);
+      setConfirming(false);
       onSuccess();
-    }, 2200);
+    }, 900);
   }
 
-  const banks = [
-    "SBI",
-    "HDFC",
-    "ICICI",
-    "Axis Bank",
-    "Kotak",
-    "PNB",
-  ];
+  const qrImage = qrMethod === "gpay" ? GPAY_QR_IMAGE : PHONEPE_QR_IMAGE;
 
   return (
     <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl w-[92vw] max-w-[480px] shadow-2xl overflow-hidden">
+      <div className="bg-white rounded-2xl w-[92vw] max-w-[420px] shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="bg-[#a65a4a] px-6 py-5 flex items-center justify-between">
           <div>
-            <p
-              className={`${inter()} text-[#f4efe7] text-[13px] opacity-80`}
-            >
-              Paying for
-            </p>
-            <p
-              className={`${fraunces()} text-[#f4efe7] text-[20px] font-semibold`}
-              style={{
-                fontVariationSettings: '"SOFT" 0, "WONK" 1',
-              }}
-            >
+            <p className={`${inter()} text-[#f4efe7] text-[13px] opacity-80`}>Paying for</p>
+            <p className={`${fraunces()} text-[#f4efe7] text-[20px] font-semibold`} style={{ fontVariationSettings: '"SOFT" 0, "WONK" 1' }}>
               Mahila Action
             </p>
           </div>
           <div className="text-right">
-            <p
-              className={`${inter()} text-[#f4efe7]/80 text-[13px]`}
-            >
-              Amount
-            </p>
-            <p
-              className={`${inter()} text-[#f4efe7] text-[24px] font-bold`}
-            >
-              ₹{amount.toLocaleString("en-IN")}
-            </p>
+            <p className={`${inter()} text-[#f4efe7]/80 text-[13px]`}>Amount</p>
+            <p className={`${inter()} text-[#f4efe7] text-[24px] font-bold`}>₹{amount.toLocaleString("en-IN")}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="ml-4 text-[#f4efe7]/80 hover:text-[#f4efe7] cursor-pointer"
-          >
+          <button onClick={onClose} className="ml-4 text-[#f4efe7]/80 hover:text-[#f4efe7] cursor-pointer">
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 flex flex-col items-center gap-5">
           {/* Donor info summary */}
-          <div className="bg-[#f4efe7] rounded-xl px-4 py-3 mb-6 flex items-center gap-3">
-            <CheckCircle
-              size={18}
-              className="text-[#587735] shrink-0"
-            />
+          <div className="w-full bg-[#f4efe7] rounded-xl px-4 py-3 flex items-center gap-3">
+            <CheckCircle size={18} className="text-[#587735] shrink-0" />
             <div>
-              <p
-                className={`${inter()} text-[#1e1e1e] text-[13px] font-medium`}
-              >
-                {name || "Anonymous Donor"}
-              </p>
-              <p
-                className={`${inter()} text-[#1e1e1e]/60 text-[12px]`}
-              >
-                {email || "No email provided"}
-              </p>
+              <p className={`${inter()} text-[#1e1e1e] text-[13px] font-medium`}>{name || "Anonymous Donor"}</p>
+              <p className={`${inter()} text-[#1e1e1e]/60 text-[12px]`}>{email || "No email provided"}</p>
             </div>
           </div>
 
-          {/* Payment methods tabs */}
-          <div className="flex gap-2 mb-5">
-            {[
-              {
-                id: "card" as PayMethod,
-                label: "Card",
-                icon: <CreditCard size={15} />,
-              },
-              {
-                id: "upi" as PayMethod,
-                label: "UPI",
-                icon: <Smartphone size={15} />,
-              },
-              {
-                id: "netbanking" as PayMethod,
-                label: "Net Banking",
-                icon: null,
-              },
-            ].map((m) => (
+          {/* Google Pay / PhonePe toggle */}
+          <div className="flex gap-2 w-full">
+            {([
+              { id: "gpay" as const, label: "Google Pay" },
+              { id: "phonepe" as const, label: "PhonePe" },
+            ]).map(m => (
               <button
                 key={m.id}
-                onClick={() => setMethod(m.id)}
-                className={`${inter()} flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[13px] font-semibold rounded-lg border transition-colors cursor-pointer ${method === m.id
-                  ? "bg-[#a65a4a] text-[#f4efe7] border-[#a65a4a]"
-                  : "text-[#a65a4a] border-[#a65a4a]/40 hover:border-[#a65a4a]"
-                  }`}
+                onClick={() => setQrMethod(m.id)}
+                className={`${inter()} flex-1 py-2.5 text-[13px] font-semibold rounded-lg border transition-colors cursor-pointer ${qrMethod === m.id ? "bg-[#a65a4a] text-[#f4efe7] border-[#a65a4a]" : "text-[#a65a4a] border-[#a65a4a]/40 hover:border-[#a65a4a]"}`}
               >
-                {m.icon} {m.label}
+                {m.label}
               </button>
             ))}
           </div>
 
-          {/* Card form */}
-          {method === "card" && (
-            <div className="flex flex-col gap-4">
-              <div>
-                <label
-                  className={`${inter()} text-[12px] font-semibold text-[#1e1e1e]/60 uppercase tracking-wider`}
-                >
-                  Card Number
-                </label>
-                <input
-                  value={cardNum}
-                  onChange={(e) =>
-                    setCardNum(formatCard(e.target.value))
-                  }
-                  placeholder="4111 1111 1111 1111"
-                  className={`${inter()} w-full border-b-2 border-[#a65a4a] bg-transparent py-2 text-[16px] text-[#1e1e1e] placeholder-[#1e1e1e]/30 focus:outline-none mt-1`}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label
-                    className={`${inter()} text-[12px] font-semibold text-[#1e1e1e]/60 uppercase tracking-wider`}
-                  >
-                    Expiry
-                  </label>
-                  <input
-                    value={expiry}
-                    onChange={(e) =>
-                      setExpiry(formatExpiry(e.target.value))
-                    }
-                    placeholder="MM/YY"
-                    className={`${inter()} w-full border-b-2 border-[#a65a4a] bg-transparent py-2 text-[16px] text-[#1e1e1e] placeholder-[#1e1e1e]/30 focus:outline-none mt-1`}
-                  />
-                </div>
-                <div>
-                  <label
-                    className={`${inter()} text-[12px] font-semibold text-[#1e1e1e]/60 uppercase tracking-wider`}
-                  >
-                    CVV
-                  </label>
-                  <input
-                    value={cvv}
-                    onChange={(e) =>
-                      setCvv(
-                        e.target.value
-                          .replace(/\D/g, "")
-                          .slice(0, 3),
-                      )
-                    }
-                    placeholder="•••"
-                    type="password"
-                    className={`${inter()} w-full border-b-2 border-[#a65a4a] bg-transparent py-2 text-[16px] text-[#1e1e1e] placeholder-[#1e1e1e]/30 focus:outline-none mt-1`}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
+          {/* QR code */}
+          <div className="border-2 border-[#a65a4a]/25 rounded-2xl p-4 bg-white">
+            <img src={qrImage} alt={`${qrMethod === "gpay" ? "Google Pay" : "PhonePe"} QR code`} className="size-[260px] object-contain" />
+          </div>
+          <p className={`${inter()} text-[#1e1e1e]/60 text-[13px] text-center`}>
+            Scan this code with {qrMethod === "gpay" ? "Google Pay" : "PhonePe"} (or any UPI app) to pay <strong className="text-[#a65a4a]">₹{amount.toLocaleString("en-IN")}</strong>.
+          </p>
 
-          {/* UPI form */}
-          {method === "upi" && (
-            <div>
-              <label
-                className={`${inter()} text-[12px] font-semibold text-[#1e1e1e]/60 uppercase tracking-wider`}
-              >
-                UPI ID
-              </label>
-              <input
-                value={upi}
-                onChange={(e) => setUpi(e.target.value)}
-                placeholder="yourname@upi"
-                className={`${inter()} w-full border-b-2 border-[#a65a4a] bg-transparent py-2 text-[16px] text-[#1e1e1e] placeholder-[#1e1e1e]/30 focus:outline-none mt-1`}
-              />
-              <div className="mt-5 grid grid-cols-3 gap-3">
-                {[
-                  "GPay",
-                  "PhonePe",
-                  "Paytm",
-                  "BHIM",
-                  "Amazon Pay",
-                  "Cred",
-                ].map((app) => (
-                  <div
-                    key={app}
-                    className="border border-[#a65a4a]/30 rounded-xl py-2.5 text-center cursor-pointer hover:border-[#a65a4a] transition-colors"
-                  >
-                    <p
-                      className={`${inter()} text-[#1e1e1e] text-[12px] font-semibold`}
-                    >
-                      {app}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Net banking */}
-          {method === "netbanking" && (
-            <div>
-              <label
-                className={`${inter()} text-[12px] font-semibold text-[#1e1e1e]/60 uppercase tracking-wider`}
-              >
-                Select Your Bank
-              </label>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {banks.map((b) => (
-                  <button
-                    key={b}
-                    onClick={() => setBank(b)}
-                    className={`${inter()} text-[14px] font-semibold py-3 rounded-xl border-2 cursor-pointer transition-colors ${bank === b
-                      ? "border-[#a65a4a] bg-[#a65a4a] text-[#f4efe7]"
-                      : "border-[#a65a4a]/30 text-[#1e1e1e] hover:border-[#a65a4a]"
-                      }`}
-                  >
-                    {b}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Pay button */}
-          <button
-            onClick={handlePay}
-            disabled={processing}
-            className={`${inter()} w-full bg-[#a65a4a] text-[#f4efe7] text-[18px] font-semibold py-4 rounded-full mt-6 hover:bg-[#993925] transition-colors cursor-pointer disabled:opacity-70 flex items-center justify-center gap-3`}
+          {/* <button
+            onClick={handleConfirmPaid}
+            disabled={confirming}
+            className={`${inter()} w-full bg-[#a65a4a] text-[#f4efe7] text-[17px] font-semibold py-4 rounded-full hover:bg-[#993925] transition-colors cursor-pointer disabled:opacity-70 flex items-center justify-center gap-3`}
           >
-            {processing ? (
+            {confirming ? (
               <>
-                <svg
-                  className="animate-spin size-5 text-[#f4efe7]"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                  />
+                <svg className="animate-spin size-5 text-[#f4efe7]" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Processing…
+                Confirming…
               </>
-            ) : (
-              `Pay ₹${amount.toLocaleString("en-IN")}`
-            )}
-          </button>
+            ) : "I've Completed the Payment"}
+          </button> */}
 
-          <p
-            className={`${inter()} text-center text-[11px] text-[#1e1e1e]/40 mt-3`}
-          >
-            🔒 256-bit SSL secured · Your details are safe
+          <p className={`${inter()} text-center text-[11px] text-[#1e1e1e]/40`}>
+            🔒 Payments are made directly via UPI · Your details are safe
           </p>
         </div>
       </div>
@@ -2897,73 +2706,71 @@ function PaymentModal({
 }
 
 // ── Payment Success ──────────────────────────────────────────────────────
-function PaymentSuccess({
-  amount,
-  name,
-  onClose,
-}: {
-  amount: number;
-  name: string;
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl w-full max-w-[440px] shadow-2xl p-8 text-center">
-        <div className="size-20 bg-[#587735]/10 rounded-full flex items-center justify-center mx-auto mb-5">
-          <CheckCircle size={40} className="text-[#587735]" />
-        </div>
-        <h3
-          className={`${fraunces()} text-[#1e1e1e] text-[32px]`}
-          style={{
-            fontVariationSettings: '"SOFT" 0, "WONK" 1',
-          }}
-        >
-          Thank You!
-        </h3>
-        <p
-          className={`${inter()} text-[#1e1e1e]/70 text-[17px] mt-2`}
-        >
-          {name ? `Dear ${name}, your` : "Your"} donation of{" "}
-          <strong className="text-[#a65a4a]">
-            ₹{amount.toLocaleString("en-IN")}
-          </strong>{" "}
-          has been received.
-        </p>
-        <p
-          className={`${inter()} text-[#1e1e1e]/60 text-[15px] mt-3 leading-relaxed`}
-        >
-          Your contribution directly supports women and
-          communities across India. A confirmation receipt will
-          be sent to your email.
-        </p>
-        <div className="bg-[#f4efe7] rounded-xl p-5 mt-6">
-          <p
-            className={`${fraunces()} text-[#a65a4a] text-[20px]`}
-            style={{
-              fontVariationSettings: '"SOFT" 0, "WONK" 1',
-            }}
-          >
-            "Small Actions. Lasting Change."
-          </p>
-        </div>
-        <button
-          onClick={onClose}
-          className={`${inter()} w-full bg-[#a65a4a] text-[#f4efe7] text-[17px] font-semibold py-4 rounded-full mt-6 hover:bg-[#993925] transition-colors cursor-pointer`}
-        >
-          Continue
-        </button>
-      </div>
-    </div>
-  );
-}
+// function PaymentSuccess({
+//   amount,
+//   name,
+//   onClose,
+// }: {
+//   amount: number;
+//   name: string;
+//   onClose: () => void;
+// }) {
+//   return (
+//     <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+//       <div className="bg-white rounded-2xl w-full max-w-[440px] shadow-2xl p-8 text-center">
+//         <div className="size-20 bg-[#587735]/10 rounded-full flex items-center justify-center mx-auto mb-5">
+//           <CheckCircle size={40} className="text-[#587735]" />
+//         </div>
+//         <h3
+//           className={`${fraunces()} text-[#1e1e1e] text-[32px]`}
+//           style={{
+//             fontVariationSettings: '"SOFT" 0, "WONK" 1',
+//           }}
+//         >
+//           Thank You!
+//         </h3>
+//         <p
+//           className={`${inter()} text-[#1e1e1e]/70 text-[17px] mt-2`}
+//         >
+//           {name ? `Dear ${name}, your` : "Your"} donation of{" "}
+//           <strong className="text-[#a65a4a]">
+//             ₹{amount.toLocaleString("en-IN")}
+//           </strong>{" "}
+//           has been received.
+//         </p>
+//         <p
+//           className={`${inter()} text-[#1e1e1e]/60 text-[15px] mt-3 leading-relaxed`}
+//         >
+//           Your contribution directly supports women and
+//           communities across India. A confirmation receipt will
+//           be sent to your email.
+//         </p>
+//         <div className="bg-[#f4efe7] rounded-xl p-5 mt-6">
+//           <p
+//             className={`${fraunces()} text-[#a65a4a] text-[20px]`}
+//             style={{
+//               fontVariationSettings: '"SOFT" 0, "WONK" 1',
+//             }}
+//           >
+//             "Small Actions. Lasting Change."
+//           </p>
+//         </div>
+//         <button
+//           onClick={onClose}
+//           className={`${inter()} w-full bg-[#a65a4a] text-[#f4efe7] text-[17px] font-semibold py-4 rounded-full mt-6 hover:bg-[#993925] transition-colors cursor-pointer`}
+//         >
+//           Continue
+//         </button>
+//       </div>
+//     </div>
+//   );
+// }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DONATION FORM CARD — reused by the Donate page AND the "Donor" tab of the
 // Reserve Seat modal, so both look and behave identically.
 // ═══════════════════════════════════════════════════════════════════════════
 function DonationFormCard({ eventName, initialCampaignId }: { eventName?: string; initialCampaignId?: string }) {
-  const [donationType, setDonationType] = useState<DonationType>("one-time");
-  const [selectedAmount, setSelectedAmount] = useState(500);
   const [customAmount, setCustomAmount] = useState("");
   const [donorName, setDonorName] = useState("");
   const [donorEmail, setDonorEmail] = useState("");
@@ -2980,21 +2787,14 @@ function DonationFormCard({ eventName, initialCampaignId }: { eventName?: string
   }, [initialCampaignId]);
 
   const selectedCampaign = CAMPAIGNS.find(c => c.id === campaignId) ?? CAMPAIGNS[0];
-  const presetAmounts = [500, 1000, 5000];
-  const finalAmount = customAmount
-    ? parseInt(customAmount, 10) || 0
-    : selectedAmount;
+  const finalAmount = parseInt(customAmount, 10) || 0;
 
   function handleProceed() {
-    return showComingSoonModal();
-    // ── Original logic (restore by deleting the line above) ──
-    // if (!finalAmount || finalAmount < 10)
-    //   return toast.error(
-    //     "Please enter a valid donation amount",
-    //   );
-    // if (!donorPhone.trim())
-    //   return toast.error("Please enter your phone number");
-    // setShowPayment(true);
+    if (!finalAmount || finalAmount < 10)
+      return toast.error("Please enter a valid donation amount");
+    if (!donorPhone.trim())
+      return toast.error("Please enter your phone number");
+    setShowPayment(true);
   }
 
   async function handlePaymentSuccess() {
@@ -3004,7 +2804,6 @@ function DonationFormCard({ eventName, initialCampaignId }: { eventName?: string
       name: anonymous ? "" : donorName,
       email: anonymous ? "" : donorEmail,
       phone: donorPhone,
-      donation_type: donationType,
       anonymous,
       event_name: eventName,
       campaign_name: selectedCampaign.name,
@@ -3021,7 +2820,6 @@ function DonationFormCard({ eventName, initialCampaignId }: { eventName?: string
     setDonorEmail("");
     setDonorPhone("");
     setCustomAmount("");
-    setSelectedAmount(500);
   }
 
   return (
@@ -3035,6 +2833,25 @@ function DonationFormCard({ eventName, initialCampaignId }: { eventName?: string
         >
           {eventName ? "Donate To This Event" : "Donate To This Campaign"}
         </h3>
+
+        {/* Custom amount */}
+        <div>
+          <p
+            className={`${inter()} text-[13px] font-medium text-[#1e1e1e] uppercase tracking-wider mb-1`}
+          >
+            Custom Contribution:
+          </p>
+          <div className="border-b-2 border-[#a65a4a] pb-2">
+            <input
+              value={customAmount}
+              onChange={(e) => {
+                setCustomAmount(e.target.value.replace(/\D/g, ""));
+              }}
+              placeholder="₹ Enter amount"
+              className={`${inter()} w-full bg-transparent text-[15px] text-[#1e1e1e] placeholder-[#919090] focus:outline-none`}
+            />
+          </div>
+        </div>
 
         {/* Campaign selector */}
         <div>
@@ -3058,79 +2875,6 @@ function DonationFormCard({ eventName, initialCampaignId }: { eventName?: string
           </div>
         </div>
 
-        {/* One-time / Monthly */}
-        <div className="flex gap-4">
-          {[
-            {
-              val: "one-time" as DonationType,
-              label: "One-Time",
-            },
-            {
-              val: "monthly" as DonationType,
-              label: "Monthly",
-            },
-          ].map(({ val, label }) => (
-            <button
-              key={val}
-              onClick={() => setDonationType(val)}
-              className={`${inter()} flex-1 text-[14px] font-bold px-6 py-2.5 rounded-full cursor-pointer transition-colors ${donationType === val
-                ? "bg-[#a65a4a] text-[#f4efe7]"
-                : "bg-[#f4efe7] border border-[#a65a4a] text-[#a65a4a] hover:bg-[#a65a4a]/10"
-                }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {/* Preset amounts */}
-        <div>
-          <p
-            className={`${inter()} text-[13px] font-medium text-[#1e1e1e] uppercase tracking-wider mb-3`}
-          >
-            Suggest Contribution Amount (INR):
-          </p>
-          <div className="flex gap-3">
-            {presetAmounts.map((a) => (
-              <button
-                key={a}
-                onClick={() => {
-                  setSelectedAmount(a);
-                  setCustomAmount("");
-                }}
-                className={`${inter()} flex-1 text-[14px] font-bold px-4 py-2.5 rounded-full cursor-pointer transition-colors ${selectedAmount === a && !customAmount
-                  ? "bg-[#a65a4a] text-[#f4efe7]"
-                  : "bg-[#f4efe7] border border-[#a65a4a] text-[#a65a4a] hover:bg-[#a65a4a]/10"
-                  }`}
-              >
-                ₹{a.toLocaleString("en-IN")}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Custom amount */}
-        <div>
-          <p
-            className={`${inter()} text-[13px] font-medium text-[#1e1e1e] uppercase tracking-wider mb-1`}
-          >
-            Custom Contribution:
-          </p>
-          <div className="border-b-2 border-[#a65a4a] pb-2">
-            <input
-              value={customAmount}
-              onChange={(e) => {
-                setCustomAmount(
-                  e.target.value.replace(/\D/g, ""),
-                );
-                setSelectedAmount(0);
-              }}
-              placeholder="₹ Enter amount"
-              className={`${inter()} w-full bg-transparent text-[15px] text-[#1e1e1e] placeholder-[#919090] focus:outline-none`}
-            />
-          </div>
-        </div>
-
         {/* Name */}
         <div>
           <p
@@ -3141,9 +2885,7 @@ function DonationFormCard({ eventName, initialCampaignId }: { eventName?: string
           <div className="border-b-2 border-[#a65a4a] pb-2">
             <input
               value={donorName}
-              onChange={(e) =>
-                setDonorName(e.target.value)
-              }
+              onChange={(e) => setDonorName(e.target.value)}
               placeholder="Your name"
               disabled={anonymous}
               className={`${inter()} w-full bg-transparent text-[15px] text-[#1e1e1e] placeholder-[#919090] focus:outline-none disabled:opacity-40`}
@@ -3161,9 +2903,7 @@ function DonationFormCard({ eventName, initialCampaignId }: { eventName?: string
           <div className="border-b-2 border-[#a65a4a] pb-2">
             <input
               value={donorEmail}
-              onChange={(e) =>
-                setDonorEmail(e.target.value)
-              }
+              onChange={(e) => setDonorEmail(e.target.value)}
               placeholder="your@email.com"
               type="email"
               disabled={anonymous}
@@ -3200,22 +2940,12 @@ function DonationFormCard({ eventName, initialCampaignId }: { eventName?: string
           <label className="flex items-center gap-3 cursor-pointer">
             <div
               onClick={() => setShowDetails(!showDetails)}
-              className={`size-5 rounded border cursor-pointer flex items-center justify-center transition-colors ${showDetails
-                ? "bg-[#a65a4a] border-[#a65a4a]"
-                : "bg-[#f4efe7] border-[#a65a4a]"
+              className={`size-5 rounded border cursor-pointer flex items-center justify-center transition-colors ${showDetails ? "bg-[#a65a4a] border-[#a65a4a]" : "bg-[#f4efe7] border-[#a65a4a]"
                 }`}
             >
-              {showDetails && (
-                <CheckCircle
-                  size={14}
-                  className="text-[#f4efe7]"
-                  strokeWidth={3}
-                />
-              )}
+              {showDetails && <CheckCircle size={14} className="text-[#f4efe7]" strokeWidth={3} />}
             </div>
-            <span
-              className={`${inter()} text-[15px] font-medium text-[#1e1e1e]`}
-            >
+            <span className={`${inter()} text-[15px] font-medium text-[#1e1e1e]`}>
               Show my details
             </span>
           </label>
@@ -3228,22 +2958,12 @@ function DonationFormCard({ eventName, initialCampaignId }: { eventName?: string
                   setDonorEmail("");
                 }
               }}
-              className={`size-5 rounded border cursor-pointer flex items-center justify-center transition-colors ${anonymous
-                ? "bg-[#a65a4a] border-[#a65a4a]"
-                : "bg-[#f4efe7] border-[#a65a4a]"
+              className={`size-5 rounded border cursor-pointer flex items-center justify-center transition-colors ${anonymous ? "bg-[#a65a4a] border-[#a65a4a]" : "bg-[#f4efe7] border-[#a65a4a]"
                 }`}
             >
-              {anonymous && (
-                <CheckCircle
-                  size={14}
-                  className="text-[#f4efe7]"
-                  strokeWidth={3}
-                />
-              )}
+              {anonymous && <CheckCircle size={14} className="text-[#f4efe7]" strokeWidth={3} />}
             </div>
-            <span
-              className={`${inter()} text-[15px] font-medium text-[#1e1e1e]`}
-            >
+            <span className={`${inter()} text-[15px] font-medium text-[#1e1e1e]`}>
               Donate anonymously
             </span>
           </label>
@@ -3257,9 +2977,7 @@ function DonationFormCard({ eventName, initialCampaignId }: { eventName?: string
           Support for a Cause <ChevronRight size={20} />
         </button>
 
-        <p
-          className={`${inter()} text-center text-[12px] text-[#1e1e1e]/50`}
-        >
+        <p className={`${inter()} text-center text-[12px] text-[#1e1e1e]/50`}>
           80G Tax exemption available · Secure payment
         </p>
       </div>
@@ -3270,13 +2988,6 @@ function DonationFormCard({ eventName, initialCampaignId }: { eventName?: string
           email={anonymous ? "" : donorEmail}
           onClose={() => setShowPayment(false)}
           onSuccess={handlePaymentSuccess}
-        />
-      )}
-      {paymentSuccess && (
-        <PaymentSuccess
-          amount={finalAmount}
-          name={anonymous ? "" : donorName}
-          onClose={handleSuccessClose}
         />
       )}
     </>

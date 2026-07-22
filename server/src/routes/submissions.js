@@ -2,10 +2,11 @@ import { Router } from "express";
 import { nanoid } from "nanoid";
 import db from "../db.js";
 import { requireAdmin } from "../middleware/auth.js";
+import { sendVolunteerConfirmationEmail, sendReservationConfirmationEmail, sendVendorConfirmationEmail } from "../email.js";
 
 export const submissionsRouter = Router();
 
-function makeResource(router, { path, table, requiredFields, mapIn, }) {
+function makeResource(router, { path, table, requiredFields, mapIn, afterCreate }) {
   // Public: create
   router.post(`/${path}`, (req, res) => {
     const body = req.body || {};
@@ -23,6 +24,14 @@ function makeResource(router, { path, table, requiredFields, mapIn, }) {
         `INSERT INTO ${table} (id, ${columns.join(", ")}) VALUES (?, ${placeholders})`
       ).run(id, ...Object.values(row));
       res.status(201).json({ ok: true, id });
+      // Fire-and-forget: respond to the client immediately, don't make them
+      // wait on an email round-trip. Errors here are logged, not surfaced —
+      // the submission itself already succeeded.
+      if (afterCreate) {
+        Promise.resolve(afterCreate(body)).catch((err) =>
+          console.error(`POST /${path}: afterCreate hook failed:`, err)
+        );
+      }
     } catch (err) {
       console.error(`POST /${path} failed:`, err);
       res.status(500).json({ error: "Could not save submission." });
@@ -71,6 +80,7 @@ makeResource(submissionsRouter, {
     volunteer_commitment: b.volunteer_commitment || null,
     companions: JSON.stringify(b.companions || []),
   }),
+  afterCreate: (b) => sendReservationConfirmationEmail(b.email, b.name, b.event_name, !!b.volunteer_commitment),
 });
 
 makeResource(submissionsRouter, {
@@ -86,6 +96,7 @@ makeResource(submissionsRouter, {
     offering: b.offering,
     needs_space: b.needs_space ? 1 : 0,
   }),
+  afterCreate: (b) => sendVendorConfirmationEmail(b.email, b.contact_name, b.business_name, b.event_name),
 });
 
 makeResource(submissionsRouter, {
@@ -99,6 +110,7 @@ makeResource(submissionsRouter, {
     skills: b.skills || null,
     selected_events: JSON.stringify(b.selected_events || []),
   }),
+  afterCreate: (b) => sendVolunteerConfirmationEmail(b.email, b.name, b.selected_events || []),
 });
 
 makeResource(submissionsRouter, {
