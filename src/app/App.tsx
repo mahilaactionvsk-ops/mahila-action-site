@@ -1139,7 +1139,7 @@ function ReserveSeatModal({
   onKindChange?: (kind: ReserveUIKind) => void;
 }) {
   const siteData = useSiteData();
-  const openKinds = event.windows.filter(w => isWindowOpen(w));
+  const openKinds = (Array.isArray(event.windows) ? event.windows : []).filter(w => isWindowOpen(w));
   // "Attendee" is always available alongside whichever windows (Volunteer / Vendor / Donor) the
   // admin has opened for this event — it isn't gated by a registration window of its own.
   const kinds: ReserveUIKind[] = [...openKinds.map(w => w.kind), "attendee"];
@@ -1645,7 +1645,7 @@ function ClosedEventNoticeModal({ events, onClose }: { events: EventItem[]; onCl
                   <span className="font-['Inter',sans-serif] text-[12px] text-[#1e1e1e]/55 flex items-center gap-1"><MapPin size={11} /> {ev.location}</span>
                 </div>
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {ev.windows.filter(w => w.enabled).map(w => (
+                  {(Array.isArray(ev.windows) ? ev.windows : []).filter(w => w.enabled).map(w => (
                     <span key={w.kind} className="font-['Inter',sans-serif] text-[11px] bg-[#a65a4a]/10 text-[#a65a4a] px-2.5 py-1 rounded-full">
                       {RESERVE_KIND_LABEL[w.kind]} opens {new Date(w.regStart).toLocaleDateString()}
                     </span>
