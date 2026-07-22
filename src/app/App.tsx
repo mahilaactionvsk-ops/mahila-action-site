@@ -810,7 +810,7 @@ function VolunteerPortal({ onClose, initialStep, resetToken, events }: { onClose
 
   const now = new Date();
   const realEvents = events
-    .filter((ev) => ev.windows.some((w) => w.enabled && new Date(w.regEnd) >= now)) // don't show closed events
+    .filter((ev) => (Array.isArray(ev.windows) ? ev.windows : []).some((w) => w.enabled && new Date(w.regEnd) >= now)) // don't show closed events
     .map((ev) => ({
       id: ev.id,
       status: (isEventOpen(ev, now) ? "ongoing" : "upcoming") as "ongoing" | "upcoming",
