@@ -72,14 +72,7 @@ exports/
 **/public/uploads/*
 !**/public/uploads/.gitkeep
 
-############################
-# Database / SQLite
-############################
 
-*.sql
-*.sqlite
-*.sqlite3
-data/*.db
 
 ############################
 # OS Files
