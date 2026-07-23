@@ -282,21 +282,15 @@ export function isWindowOpen(w: RegWindow, now = new Date()): boolean {
 
 /** An event is "open" if at least one of its enabled registration windows is currently open. */
 export function isEventOpen(ev: EventItem, now = new Date()): boolean {
-  const windows = Array.isArray(ev.windows) ? ev.windows : [];
-  return windows.some((w) => isWindowOpen(w, now));
+  return ev.windows.some((w) => isWindowOpen(w, now));
 }
 
 /** Events whose registration hasn't started yet, or is currently open — used to populate the "next available" modal. */
 export function upcomingOrOpenEvents(events: EventItem[], now = new Date()): EventItem[] {
   return events
-    .filter((ev) => {
-      const windows = Array.isArray(ev.windows) ? ev.windows : [];
-      return windows.some((w) => w.enabled && new Date(w.regEnd) >= now);
-    })
+    .filter((ev) => ev.windows.some((w) => w.enabled && new Date(w.regEnd) >= now))
     .sort((a, b) => new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime());
 }
-
-
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOAD — reads every content type from Strapi; falls back to defaults per-type
@@ -333,11 +327,7 @@ export async function loadSiteData(): Promise<SiteData> {
         eventDate: r.eventDate,
         location: r.location ?? "",
         totalSeats: r.totalSeats ?? 0,
-        windows: Array.isArray(r.windows)
-          ? r.windows
-          : (typeof r.windows === "string"
-            ? (() => { try { return JSON.parse(r.windows); } catch { return []; } })()
-            : []),
+        windows: r.windows ?? [],
         categoryId: r.category?.documentId ?? r.category?.id ?? null,
         createdAt: r.createdAt,
       }))
