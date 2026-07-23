@@ -1,0 +1,30 @@
+{
+  "kind": "collectionType",
+  "collectionName": "volunteer_registrations",
+  "info": {
+    "singularName": "volunteer-registration",
+    "pluralName": "volunteer-registrations",
+    "displayName": "VolunteerRegistration"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string"
+    },
+    "email": {
+      "type": "email"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "skills": {
+      "type": "text"
+    },
+    "selectedEvents": {
+      "type": "json"
+    }
+  }
+}
