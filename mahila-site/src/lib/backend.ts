@@ -32,12 +32,24 @@ export async function saveDonation(data: {
   name: string;
   email: string;
   phone: string;
-
   anonymous: boolean;
   event_name?: string;
   campaign_name?: string;
 }): Promise<boolean> {
-  const res = await api.post("/api/donations", data);
+  const strapiBody = {
+    data: {
+      amount: data.amount,
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      donationType: "one-time",
+      anonymous: data.anonymous,
+      eventName: data.event_name,
+      campaignName: data.campaign_name,
+    },
+  };
+  let res = await api.post("/api/donations", strapiBody);
+  if (!res.ok) res = await api.post("/api/donations", data);
   if (!res.ok) console.error("saveDonation:", res.error);
   return res.ok;
 }
@@ -51,7 +63,19 @@ export async function saveReservation(data: {
   volunteer_commitment?: "event_only" | "ongoing";
   companions?: { name: string; phone: string }[];
 }): Promise<boolean> {
-  const res = await api.post("/api/reservations", data);
+  const strapiBody = {
+    data: {
+      eventName: data.event_name,
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      seats: data.seats,
+      volunteerCommitment: data.volunteer_commitment,
+      companions: data.companions,
+    },
+  };
+  let res = await api.post("/api/event-registrations", strapiBody);
+  if (!res.ok) res = await api.post("/api/reservations", data);
   if (!res.ok) console.error("saveReservation:", res.error);
   return res.ok;
 }
@@ -65,7 +89,19 @@ export async function saveVendor(data: {
   needs_space: boolean;
   event_name: string;
 }): Promise<boolean> {
-  const res = await api.post("/api/vendors", data);
+  const strapiBody = {
+    data: {
+      eventName: data.event_name,
+      businessName: data.business_name,
+      contactName: data.contact_name,
+      email: data.email,
+      phone: data.phone,
+      offering: data.offering,
+      needsSpace: data.needs_space,
+    },
+  };
+  let res = await api.post("/api/vendor-registrations", strapiBody);
+  if (!res.ok) res = await api.post("/api/vendors", data);
   if (!res.ok) console.error("saveVendor:", res.error);
   return res.ok;
 }
@@ -77,7 +113,17 @@ export async function saveVolunteer(data: {
   skills: string;
   selected_events: string[];
 }): Promise<boolean> {
-  const res = await api.post("/api/volunteers", data);
+  const strapiBody = {
+    data: {
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      skills: data.skills,
+      selectedEvents: data.selected_events,
+    },
+  };
+  let res = await api.post("/api/volunteer-registrations", strapiBody);
+  if (!res.ok) res = await api.post("/api/volunteers", data);
   if (!res.ok) console.error("saveVolunteer:", res.error);
   return res.ok;
 }
@@ -89,7 +135,17 @@ export async function saveContact(data: {
   subject?: string;
   message: string;
 }): Promise<boolean> {
-  const res = await api.post("/api/contact", data);
+  const strapiBody = {
+    data: {
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      subject: data.subject,
+      message: data.message,
+    },
+  };
+  let res = await api.post("/api/contact-submissions", strapiBody);
+  if (!res.ok) res = await api.post("/api/contact", data);
   if (!res.ok) console.error("saveContact:", res.error);
   return res.ok;
 }

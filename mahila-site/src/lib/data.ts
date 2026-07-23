@@ -324,23 +324,45 @@ export async function loadSiteData(): Promise<SiteData> {
     const timelineRows: any[] = timelineRes.data?.data ?? [];
     const contactRow: any = contactRes.data?.data ?? null;
 
+    const parseDescription = (desc: any): string => {
+      if (!desc) return "";
+      if (typeof desc === "string") return desc;
+      if (Array.isArray(desc)) {
+        return desc
+          .map((b: any) => (Array.isArray(b?.children) ? b.children.map((c: any) => c?.text || "").join("") : ""))
+          .filter(Boolean)
+          .join("\n\n");
+      }
+      return String(desc);
+    };
+
+    const normalizeWindow = (w: any): RegWindow => ({
+      kind: w?.kind || "volunteer",
+      enabled: w?.enabled !== undefined ? Boolean(w.enabled) : true,
+      regStart: w?.regStart ?? w?.reg_start ?? w?.startDate ?? w?.["start-date"] ?? "",
+      regEnd: w?.regEnd ?? w?.reg_end ?? w?.endDate ?? w?.["end-date"] ?? "",
+    });
+
     const events: EventItem[] = eventRows.length
-      ? eventRows.map((r: any) => ({
-        id: r.documentId ?? r.id,
-        title: r.title,
-        description: r.description ?? "",
-        image: mediaUrl(r.image),
-        eventDate: r.eventDate,
-        location: r.location ?? "",
-        totalSeats: r.totalSeats ?? 0,
-        windows: Array.isArray(r.windows)
-          ? r.windows
-          : (typeof r.windows === "string"
+      ? eventRows.map((r: any) => {
+          const rawWindows = Array.isArray(r.windows)
+            ? r.windows
+            : typeof r.windows === "string"
             ? (() => { try { return JSON.parse(r.windows); } catch { return []; } })()
-            : []),
-        categoryId: r.category?.documentId ?? r.category?.id ?? null,
-        createdAt: r.createdAt,
-      }))
+            : [];
+          return {
+            id: r.documentId ?? r.id,
+            title: r.title,
+            description: parseDescription(r.description),
+            image: mediaUrl(r.image),
+            eventDate: r.eventDate,
+            location: r.location ?? "",
+            totalSeats: r.totalSeats ?? 0,
+            windows: rawWindows.map(normalizeWindow),
+            categoryId: r.category?.documentId ?? r.category?.id ?? null,
+            createdAt: r.createdAt,
+          };
+        })
       : DEFAULT_EVENTS;
 
     const categories: Category[] = catRows.length
