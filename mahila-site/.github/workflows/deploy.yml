@@ -17,6 +17,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mahila-site
     steps:
       - uses: actions/checkout@v4
 
@@ -24,11 +27,12 @@ jobs:
         with:
           node-version: 20
           cache: "npm"
+          cache-dependency-path: mahila-site/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
-      - name: Build static site (client + SSR prerender + sitemap/robots)
+      - name: Build (client + SSR prerender + sitemap)
         run: npm run build
         env:
           # Point this at your deployed /server API (see server/README.md).
@@ -37,7 +41,7 @@ jobs:
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: ./dist
+          path: mahila-site/dist
 
   deploy:
     needs: build

@@ -810,7 +810,7 @@ function VolunteerPortal({ onClose, initialStep, resetToken, events }: { onClose
 
   const now = new Date();
   const realEvents = events
-    .filter((ev) => ev.windows.some((w) => w.enabled && new Date(w.regEnd) >= now)) // don't show closed events
+    .filter((ev) => (Array.isArray(ev.windows) ? ev.windows : []).some((w) => w.enabled && new Date(w.regEnd) >= now)) // don't show closed events
     .map((ev) => ({
       id: ev.id,
       status: (isEventOpen(ev, now) ? "ongoing" : "upcoming") as "ongoing" | "upcoming",
@@ -1034,7 +1034,7 @@ function VolunteerPortal({ onClose, initialStep, resetToken, events }: { onClose
                     You're Registered!
                   </h4>
                   <p className="font-['Inter',sans-serif] text-[#1e1e1e]/65 text-[15px] leading-relaxed max-w-[400px]">
-                    Thank you, <strong className="text-[#a65a4a]">{profile?.name}</strong>! You've signed up for <strong className="text-[#a65a4a]">{selectedEvents.length} event{selectedEvents.length > 1 ? "s" : ""}</strong>. A confirmation will be sent to <strong className="text-[#a65a4a]">{profile?.email}</strong>.
+                    Thank you, <strong className="text-[#a65a4a]">{profile?.name}</strong>! You've signed up for <strong className="text-[#a65a4a]">{selectedEvents.length} event{selectedEvents.length > 1 ? "s" : ""}</strong>.
                   </p>
                   <div className="w-full bg-white rounded-2xl p-5 text-left">
                     <p className="font-['Inter',sans-serif] text-[12px] font-semibold text-[#1e1e1e]/50 uppercase tracking-wider mb-3">Your Events</p>
@@ -1139,7 +1139,7 @@ function ReserveSeatModal({
   onKindChange?: (kind: ReserveUIKind) => void;
 }) {
   const siteData = useSiteData();
-  const openKinds = event.windows.filter(w => isWindowOpen(w));
+  const openKinds = (Array.isArray(event.windows) ? event.windows : []).filter(w => isWindowOpen(w));
   // "Attendee" is always available alongside whichever windows (Volunteer / Vendor / Donor) the
   // admin has opened for this event — it isn't gated by a registration window of its own.
   const kinds: ReserveUIKind[] = [...openKinds.map(w => w.kind), "attendee"];
@@ -1256,8 +1256,7 @@ function VolunteerReserveForm({ event, onClose }: { event: EventItem; onClose: (
           Seat Reserved!
         </h4>
         <p className={`font-['Inter',sans-serif] text-[#1e1e1e]/70 text-[15px] leading-relaxed`}>
-          Thank you, <strong className="text-[#a65a4a]">{name}</strong>! Your {seats} seat{Number(seats) > 1 ? "s have" : " has"} been reserved as {commitment === "ongoing" ? "an ongoing volunteer" : "a volunteer for this event only"}. A confirmation will be sent to <strong className="text-[#a65a4a]">{email}</strong>.
-        </p>
+          Thank you, <strong className="text-[#a65a4a]">{name}</strong>! Your {seats} seat{Number(seats) > 1 ? "s have" : " has"} been reserved as {commitment === "ongoing" ? "an ongoing volunteer" : "a volunteer for this event only"}. </p>
         <button onClick={onClose} className={`font-['Inter',sans-serif] w-full bg-[#a65a4a] text-[#f4efe7] text-[16px] font-semibold py-3.5 rounded-full mt-2 hover:bg-[#993925] transition-colors cursor-pointer`}>
           Done
         </button>
@@ -1374,7 +1373,7 @@ function VendorReserveForm({ event, onClose }: { event: EventItem; onClose: () =
           Application Received!
         </h4>
         <p className={`font-['Inter',sans-serif] text-[#1e1e1e]/70 text-[15px] leading-relaxed`}>
-          Thank you, <strong className="text-[#a65a4a]">{businessName}</strong>! We'll reach out to <strong className="text-[#a65a4a]">{email}</strong> to confirm details for {event.title}.
+          Thank you, <strong className="text-[#a65a4a]">{businessName}</strong>! Your application to partner with us for {event.title} has been received.
         </p>
         <button onClick={onClose} className={`font-['Inter',sans-serif] w-full bg-[#a65a4a] text-[#f4efe7] text-[16px] font-semibold py-3.5 rounded-full mt-2 hover:bg-[#993925] transition-colors cursor-pointer`}>
           Done
@@ -1486,7 +1485,7 @@ function AttendEventForm({
           You're All Set!
         </h4>
         <p className={`font-['Inter',sans-serif] text-[#1e1e1e]/70 text-[15px] leading-relaxed`}>
-          Thank you, <strong className="text-[#a65a4a]">{name}</strong>! {members} attendee{Number(members) > 1 ? "s are" : " is"} confirmed for <strong className="text-[#a65a4a]">{selectedEvent?.title}</strong>. A confirmation will be sent to <strong className="text-[#a65a4a]">{email}</strong>.
+          Thank you, <strong className="text-[#a65a4a]">{name}</strong>! {members} attendee{Number(members) > 1 ? "s are" : " is"} confirmed for <strong className="text-[#a65a4a]">{selectedEvent?.title}</strong>.
         </p>
         <button onClick={onClose} className={`font-['Inter',sans-serif] w-full bg-[#a65a4a] text-[#f4efe7] text-[16px] font-semibold py-3.5 rounded-full mt-2 hover:bg-[#993925] transition-colors cursor-pointer`}>
           Done
@@ -1646,7 +1645,7 @@ function ClosedEventNoticeModal({ events, onClose }: { events: EventItem[]; onCl
                   <span className="font-['Inter',sans-serif] text-[12px] text-[#1e1e1e]/55 flex items-center gap-1"><MapPin size={11} /> {ev.location}</span>
                 </div>
                 <div className="flex flex-wrap gap-2 mt-2">
-                  {ev.windows.filter(w => w.enabled).map(w => (
+                  {(Array.isArray(ev.windows) ? ev.windows : []).filter(w => w.enabled).map(w => (
                     <span key={w.kind} className="font-['Inter',sans-serif] text-[11px] bg-[#a65a4a]/10 text-[#a65a4a] px-2.5 py-1 rounded-full">
                       {RESERVE_KIND_LABEL[w.kind]} opens {new Date(w.regStart).toLocaleDateString()}
                     </span>
