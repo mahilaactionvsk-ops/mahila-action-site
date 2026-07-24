@@ -16,7 +16,7 @@ process.on('unhandledRejection', (reason: any) => {
 });
 
 const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Database => {
-  const client = env('DATABASE_CLIENT', 'sqlite');
+  const client = env('DATABASE_CLIENT', 'postgres');
 
   // Ensure sqlite directory exists if sqlite is selected
   if (client === 'sqlite') {
@@ -59,7 +59,7 @@ const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Database 
         ...(env('DATABASE_URL')
           ? { connectionString: env('DATABASE_URL') }
           : {
-              host: env('DATABASE_HOST', 'localhost'),
+              host: env('DATABASE_HOST', '127.0.0.1'),
               port: env.int('DATABASE_PORT', 5432),
               database: env('DATABASE_NAME', 'strapi'),
               user: env('DATABASE_USERNAME', 'strapi'),
