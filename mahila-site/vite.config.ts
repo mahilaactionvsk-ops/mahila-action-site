@@ -28,7 +28,9 @@ export default defineConfig(({ command }) => ({
   // update the address bar. Keep BASE_PATH itself in sync with your repo
   // name in src/config/site.ts — that's the only place you should need to
   // edit when the repo name changes.
-  base: command === 'serve' ? '/' : BASE_PATH,
+  // On Netlify/Vercel the site is served from root ("/"), while on GitHub Pages
+  // project sites it is served from "/<repo-name>/". Handle both automatically.
+  base: (process.env.NETLIFY || process.env.VERCEL) ? '/' : (command === 'serve' ? '/' : BASE_PATH),
   plugins: [
     figmaAssetResolver(),
     // The React and Tailwind plugins are both required for Make, even if
