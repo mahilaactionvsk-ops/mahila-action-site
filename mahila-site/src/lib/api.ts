@@ -2,7 +2,7 @@
 // Set VITE_API_URL in your .env (see .env.example) to point at your Strapi instance —
 // e.g. http://localhost:1337 in development, or your deployed Strapi URL in production.
 
-export const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "";
+export const BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "https://mahila-action-site-production.up.railway.app";
 
 if (!BASE_URL && import.meta.env.PROD) {
   console.warn(
