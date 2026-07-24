@@ -1,14 +1,13 @@
-import { defineConfig } from 'vite'
+import { defineConfig, Plugin } from 'vite'
 import path from 'path'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { BASE_PATH } from './src/config/site'
 
-
-function figmaAssetResolver() {
+function figmaAssetResolver(): Plugin {
   return {
     name: 'figma-asset-resolver',
-    resolveId(id) {
+    resolveId(id: string) {
       if (id.startsWith('figma:asset/')) {
         const filename = id.replace('figma:asset/', '')
         return path.resolve(__dirname, 'src/assets', filename)
@@ -28,7 +27,9 @@ export default defineConfig(({ command }) => ({
   // update the address bar. Keep BASE_PATH itself in sync with your repo
   // name in src/config/site.ts — that's the only place you should need to
   // edit when the repo name changes.
-  base: command === 'serve' ? '/' : BASE_PATH,
+  // On Netlify/Vercel the site is served from root ("/"), while on GitHub Pages
+  // project sites it is served from "/<repo-name>/". Handle both automatically.
+  base: (process.env.NETLIFY || process.env.VERCEL) ? '/' : (command === 'serve' ? '/' : BASE_PATH),
   plugins: [
     figmaAssetResolver(),
     // The React and Tailwind plugins are both required for Make, even if
