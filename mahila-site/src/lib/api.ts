@@ -13,7 +13,6 @@ if (!BASE_URL && import.meta.env.PROD) {
 async function request<T>(path: string, init?: RequestInit): Promise<{ ok: boolean; data?: T; error?: string; status: number }> {
   try {
     const res = await fetch(`${BASE_URL}${path}`, {
-      credentials: "include",
       headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
       ...init,
     });

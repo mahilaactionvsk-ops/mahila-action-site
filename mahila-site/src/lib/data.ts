@@ -124,15 +124,18 @@ const ENDPOINTS = {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function mediaUrl(media: any): string {
-  if (!media || !media.url) return "";
-  // Already absolute (e.g. served from S3/Cloudinary in production) — leave as-is.
-  if (/^https?:\/\//i.test(media.url)) return media.url;
-  return `${BASE_URL}${media.url}`;
+  if (!media) return "";
+  const raw = Array.isArray(media) ? media[0] : media;
+  const item = raw?.data?.attributes || raw?.data || raw;
+  const url = item?.url || raw?.url || "";
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  return `${BASE_URL}${url}`;
 }
 
 function mediaUrls(mediaList: any): string[] {
-  if (!Array.isArray(mediaList)) return [];
-  return mediaList.map(mediaUrl).filter(Boolean);
+  const items = Array.isArray(mediaList?.data) ? mediaList.data : Array.isArray(mediaList) ? mediaList : [];
+  return items.map(mediaUrl).filter(Boolean);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
