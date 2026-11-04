@@ -15,11 +15,12 @@ import { ContentContext } from "./context/ContentContext";
 import { SiteDataContext } from "./context/SiteDataContext";
 
 // Shared helpers
-import { PAGE_TO_PATH, pathToPage, type Page } from "./components/shared/styleHelpers";
+import { PAGE_TO_PATH, pathToPage, scrollToTop, type Page } from "./components/shared/styleHelpers";
 
 // Components
 import { Navigation } from "./components/Navigation";
 import { Footer } from "./components/Footer";
+import { AdminObservationBar } from "./components/AdminObservationBar";
 
 // Modals
 import { GlobalModals } from "./modals/GlobalModals";
@@ -74,13 +75,27 @@ export default function App() {
         navigate({ pathname: "/events", search: `?modal=reserve&id=${encodeURIComponent(slugId)}` }, { replace: true });
       } else if (first === "stories" || first === "story") {
         navigate({ pathname: "/stories", search: `?modal=story&id=${encodeURIComponent(slugId)}` }, { replace: true });
+      } else if (first === "impact" || first === "impacts") {
+        navigate({ pathname: "/home", search: `?modal=impact&id=${encodeURIComponent(slugId)}` }, { replace: true });
       }
     }
   }, [location.pathname, location.search, navigate]);
 
   useEffect(() => {
-    if (page !== "admin") window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [page]);
+    if (typeof window !== "undefined" && "scrollRestoration" in window.history) {
+      window.history.scrollRestoration = "manual";
+    }
+  }, []);
+
+  useEffect(() => {
+    if (page !== "admin") {
+      scrollToTop("instant");
+      const raf = requestAnimationFrame(() => {
+        scrollToTop("instant");
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [location.pathname, page]);
 
   if (page === "admin") {
     return (
@@ -97,7 +112,7 @@ export default function App() {
             }
           >
             <AdminPage
-              onExit={() => setPage("home")}
+              onExit={(targetPage) => setPage(targetPage || "home")}
               onContentSaved={(updated) => setContent(updated)}
               siteData={siteData}
               onSiteDataChange={setSiteData}
@@ -118,6 +133,7 @@ export default function App() {
           <Seo meta={routeMeta} jsonLd={pageJsonLd} />
           <Toaster position="top-center" richColors />
           <ComingSoonModal />
+          <AdminObservationBar page={page} setPage={setPage} />
           <Navigation page={page} setPage={setPage} />
           {page === "home" && <HomePage setPage={setPage} />}
           {page === "about" && <AboutPage setPage={setPage} />}

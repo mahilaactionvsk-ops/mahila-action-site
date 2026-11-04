@@ -13,12 +13,13 @@ import {
   Calendar,
   Mail,
   ChevronRight,
+  LayoutDashboard,
 } from "lucide-react";
 import { getSavedUserSession, type VolunteerAccountProfile } from "@/lib/backend";
 import { LogoMark } from "./LogoMark";
 import { useModal } from "../hooks/useModal";
 import { clearIntendedDestination } from "../hooks/useAuthGuard";
-import { inter, type Page } from "./shared/styleHelpers";
+import { inter, scrollToTop, type Page } from "./shared/styleHelpers";
 
 export function Navigation({
   page,
@@ -29,17 +30,30 @@ export function Navigation({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [userSession, setUserSession] = useState<VolunteerAccountProfile | null>(getSavedUserSession);
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return Boolean(sessionStorage.getItem("admin_jwt"));
+    }
+    return false;
+  });
   const { openModal } = useModal();
 
   useEffect(() => {
     function syncSession() {
       setUserSession(getSavedUserSession());
     }
+    function syncAdmin() {
+      setIsAdmin(Boolean(typeof window !== "undefined" && sessionStorage.getItem("admin_jwt")));
+    }
     window.addEventListener("mahila_user_session_changed", syncSession);
+    window.addEventListener("mahila_admin_auth_changed", syncAdmin);
     window.addEventListener("storage", syncSession);
+    window.addEventListener("storage", syncAdmin);
     return () => {
       window.removeEventListener("mahila_user_session_changed", syncSession);
+      window.removeEventListener("mahila_admin_auth_changed", syncAdmin);
       window.removeEventListener("storage", syncSession);
+      window.removeEventListener("storage", syncAdmin);
     };
   }, []);
 
@@ -75,14 +89,21 @@ export function Navigation({
   ];
 
   function nav(p: Page) {
-    setPage(p);
     setMenuOpen(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (document.body.style.overflow === "hidden") {
+      document.body.style.overflow = "";
+    }
+    if (page === p) {
+      scrollToTop("smooth");
+    } else {
+      setPage(p);
+      scrollToTop("instant");
+    }
   }
 
   return (
     <header className="sticky top-0 z-50 bg-[#f4efe7]/95 backdrop-blur-md border-b border-[#a65a4a]/15 shadow-xs transition-all">
-      <div className="max-w-[1280px] mx-auto px-3 sm:px-6 lg:px-8 py-2.5 sm:py-3.5 flex items-center justify-between">
+      <div className="max-w-[1280px] mx-auto px-3 sm:px-6 lg:px-8 py-2 sm:py-3 flex items-center justify-between">
         {/* Brand Logo */}
         <button
           onClick={() => nav("home")}
@@ -123,6 +144,19 @@ export function Navigation({
             <span>Donate Now</span>
           </button>
 
+          {/* Admin Panel Return Button (Visible when logged into Admin) */}
+          {isAdmin && (
+            <button
+              onClick={() => nav("admin")}
+              className={`${inter()} bg-[#1c1917] hover:bg-[#2c2725] text-white border border-amber-500/40 text-[12px] sm:text-[13px] font-semibold px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full transition-all cursor-pointer flex items-center gap-1.5 shrink-0 whitespace-nowrap shadow-xs`}
+              title="Return to Admin Panel"
+            >
+              <LayoutDashboard size={14} className="text-amber-300 shrink-0" />
+              <span className="hidden lg:inline">Admin Panel</span>
+              <span className="lg:hidden">Admin</span>
+            </button>
+          )}
+
           {/* User Profile / Login */}
           {!userSession ? (
             <button
@@ -132,7 +166,7 @@ export function Navigation({
                 clearIntendedDestination();
                 openModal("login");
               }}
-              className={`${inter()} border-2 border-[#a65a4a] text-[#a65a4a] hover:bg-[#a65a4a] hover:text-[#f4efe7] text-[12px] sm:text-[14px] font-semibold px-3 sm:px-5 py-1 sm:py-1.5 rounded-full transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 shrink-0 whitespace-nowrap`}
+              className={`${inter()} border-2 border-[#a65a4a] text-[#a65a4a] hover:bg-[#a65a4a] hover:text-[#f4efe7] text-[12px] sm:text-[14px] font-semibold px-2.5 sm:px-5 py-1 sm:py-1.5 rounded-full transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 shrink-0 whitespace-nowrap`}
             >
               <LogIn size={14} className="shrink-0" />
               <span>Login</span>
@@ -140,7 +174,7 @@ export function Navigation({
           ) : (
             <button
               onClick={() => nav("account")}
-              className={`${inter()} border-2 border-[#a65a4a] text-[12px] sm:text-[14px] font-semibold px-2.5 sm:px-4 py-1 sm:py-1.5 rounded-full transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 shrink-0 ${
+              className={`${inter()} border-2 border-[#a65a4a] text-[12px] sm:text-[14px] font-semibold px-2 sm:px-4 py-1 sm:py-1.5 rounded-full transition-all cursor-pointer flex items-center gap-1.5 sm:gap-2 shrink-0 ${
                 page === "account"
                   ? "bg-[#a65a4a] text-[#f4efe7] hover:bg-[#993925]"
                   : "bg-[#a65a4a]/10 text-[#a65a4a] hover:bg-[#a65a4a]/15 hover:text-[#993925]"
@@ -156,7 +190,7 @@ export function Navigation({
               >
                 {userSession.name.charAt(0).toUpperCase()}
               </div>
-              <span className="max-w-[55px] sm:max-w-[100px] lg:max-w-[140px] truncate">
+              <span className="max-w-[48px] sm:max-w-[100px] lg:max-w-[140px] truncate">
                 {userSession.name.split(" ")[0]}
               </span>
             </button>
@@ -164,7 +198,7 @@ export function Navigation({
 
           {/* Mobile Menu Hamburger Toggle */}
           <button
-            className="md:hidden p-1.5 sm:p-2 rounded-xl text-[#1e1e1e] hover:text-[#a65a4a] hover:bg-[#a65a4a]/10 transition-colors cursor-pointer shrink-0"
+            className="md:hidden p-1.5 rounded-xl text-[#1e1e1e] hover:text-[#a65a4a] hover:bg-[#a65a4a]/10 transition-colors cursor-pointer shrink-0"
             onClick={() => setMenuOpen(!menuOpen)}
             aria-label={menuOpen ? "Close navigation menu" : "Open navigation menu"}
             aria-expanded={menuOpen}
@@ -176,15 +210,15 @@ export function Navigation({
 
       {/* Mobile Drawer Menu (Mobile Screens < 768px) */}
       {menuOpen && (
-        <div className="fixed inset-0 top-[56px] sm:top-[68px] z-40 md:hidden flex flex-col justify-start">
+        <div className="fixed inset-0 top-[52px] sm:top-[64px] z-40 md:hidden flex flex-col justify-start">
           {/* Semi-transparent backdrop overlay */}
           <div
-            className="absolute inset-0 bg-black/45 backdrop-blur-xs transition-opacity"
+            className="absolute inset-0 bg-black/50 backdrop-blur-xs transition-opacity"
             onClick={() => setMenuOpen(false)}
           />
 
           {/* Drawer menu body */}
-          <div className="relative z-10 bg-[#f4efe7] border-b-2 border-[#a65a4a]/30 shadow-2xl rounded-b-3xl px-4 sm:px-6 pt-3 pb-6 flex flex-col gap-1 max-h-[calc(100vh-75px)] overflow-y-auto">
+          <div className="relative z-10 bg-[#f4efe7] border-b-2 border-[#a65a4a]/30 shadow-2xl rounded-b-3xl px-4 sm:px-6 pt-3 pb-6 flex flex-col gap-1 max-h-[calc(100dvh-64px)] overflow-y-auto">
             <div className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#a65a4a] px-3 py-1 mb-1">
               Navigation Menu
             </div>
@@ -215,6 +249,22 @@ export function Navigation({
             })}
 
             <div className="pt-4 mt-2 border-t border-[#a65a4a]/20 flex flex-col gap-2.5 sm:gap-3">
+              {/* Mobile Admin Panel Button */}
+              {isAdmin && (
+                <button
+                  onClick={() => nav("admin")}
+                  className={`${inter()} w-full bg-[#1c1917] border-2 border-amber-500/40 text-[#f4efe7] text-[14px] sm:text-[15px] font-semibold px-5 py-3 rounded-2xl flex items-center justify-between cursor-pointer hover:bg-[#2c2725] transition-all shadow-sm`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <LayoutDashboard size={18} className="text-amber-300" />
+                    <span>Return to Admin Panel</span>
+                  </div>
+                  <span className="text-[11px] bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded-full font-bold">
+                    Admin
+                  </span>
+                </button>
+              )}
+
               {/* Mobile Donate Button */}
               <button
                 onClick={() => nav("donate")}

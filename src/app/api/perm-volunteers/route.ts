@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryDb } from "@/lib/db";
-import { getAdminFromRequest } from "@/lib/auth";
-import { LIMITS, firstError, validateEmail, validateName, validatePhone, validateText } from "@/lib/validation";
+import { getAdminFromRequest, verifyAdminPermission } from "@/lib/auth";
+import { sendPermVolunteerAcknowledgementEmail, sendPermVolunteerAlertToAdmin } from "@/lib/email";
+import { LIMITS, firstError, normalizePhone, validateEmail, validateName, validatePhone, validateText } from "@/lib/validation";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,7 +12,7 @@ export async function POST(req: NextRequest) {
     const invalid = firstError(
       validateName(name),
       validateEmail(email),
-      phone ? validatePhone(phone) : null,
+      validatePhone(phone, "phone number", { required: false }),
       validateText(message, "your message", { max: LIMITS.message.max, required: false })
     );
     if (invalid) {
@@ -19,14 +20,44 @@ export async function POST(req: NextRequest) {
     }
 
     const typeVal = request_type === "deactivate" ? "deactivate" : "activate";
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPhone = phone ? normalizePhone(phone) : null;
+    const cleanName = name.trim();
+    const cleanMessage = message ? String(message).trim() : null;
+
+    // Prevent duplicate pending requests under review
+    const existing = await queryDb(
+      "SELECT id FROM perm_volunteer_requests WHERE LOWER(email) = LOWER($1) AND request_type = $2 AND status = 'New'",
+      [cleanEmail, typeVal]
+    );
+    if (existing.rows.length > 0) {
+      return NextResponse.json({
+        ok: true,
+        id: existing.rows[0].id,
+        alreadyPending: true,
+        message: "Your request is already submitted and under review."
+      }, { status: 200 });
+    }
 
     // perm_volunteer_requests.id is SERIAL — let the sequence assign it.
     const insertRes = await queryDb(
       `INSERT INTO perm_volunteer_requests (name, email, phone, request_type, message)
        VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [name.trim(), email.trim().toLowerCase(), phone || null, typeVal, message || null]
+      [cleanName, cleanEmail, cleanPhone, typeVal, cleanMessage]
     );
     const id = insertRes.rows[0]?.id;
+
+    sendPermVolunteerAcknowledgementEmail(cleanEmail, cleanName, typeVal).catch((err) =>
+      console.error("sendPermVolunteerAcknowledgementEmail failed:", err)
+    );
+
+    sendPermVolunteerAlertToAdmin({
+      name: cleanName,
+      email: cleanEmail,
+      phone: cleanPhone,
+      requestType: typeVal,
+      message: cleanMessage,
+    }).catch((err) => console.error("sendPermVolunteerAlertToAdmin failed:", err));
 
     return NextResponse.json({ ok: true, id }, { status: 201 });
   } catch (err: any) {
@@ -36,8 +67,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
-  const admin = await getAdminFromRequest(req);
-  if (!admin) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const auth = await verifyAdminPermission(req, "submissions", "view");
+  if (!auth.authorized) {
+    const admin = await getAdminFromRequest(req);
+    if (!admin) return NextResponse.json({ error: auth.error || "Not authenticated" }, { status: auth.status || 401 });
+  }
 
   try {
     const result = await queryDb("SELECT * FROM perm_volunteer_requests ORDER BY created_at DESC");

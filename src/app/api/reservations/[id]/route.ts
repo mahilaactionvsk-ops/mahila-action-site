@@ -1,16 +1,24 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryDb } from "@/lib/db";
-import { getAdminFromRequest } from "@/lib/auth";
+import { verifyAdminPermission } from "@/lib/auth";
+import { firstError, normalizePhone, validateEmail, validateName, validatePhone, validateSeats, validateText } from "@/lib/validation";
 
 const ALLOWED_STATUSES = ["New", "Contacted", "Completed"];
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await getAdminFromRequest(req);
-  if (!admin) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const auth = await verifyAdminPermission(req, "submissions", "view");
+  if (!auth.authorized) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
 
   try {
     const { id } = await params;
-    const res = await queryDb("SELECT * FROM event_reservations WHERE id = $1", [id]);
+    const res = await queryDb(
+      `SELECT * FROM event_reservations 
+       WHERE id = $1 
+         AND (volunteer_commitment IS NULL OR volunteer_commitment = '' OR volunteer_commitment = 'none' OR volunteer_commitment = 'attendee')`,
+      [id]
+    );
     if (res.rows.length === 0) {
       return NextResponse.json({ error: "Reservation not found" }, { status: 404 });
     }
@@ -22,12 +30,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await getAdminFromRequest(req);
-  if (!admin) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const auth = await verifyAdminPermission(req, "submissions", "edit");
+  if (!auth.authorized) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
 
   try {
     const { id } = await params;
     const { status, seats, name, email, phone, event_name } = (await req.json()) || {};
+
+    const invalid = firstError(
+      name !== undefined ? validateName(name) : null,
+      email !== undefined ? validateEmail(email) : null,
+      phone !== undefined ? validatePhone(phone, "phone number", { required: false }) : null,
+      seats !== undefined ? validateSeats(seats) : null,
+      event_name !== undefined ? validateText(event_name, "event name", { max: 200 }) : null
+    );
+    if (invalid) {
+      return NextResponse.json({ error: invalid }, { status: 400 });
+    }
 
     const updates: string[] = [];
     const values: any[] = [];
@@ -54,7 +75,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
     if (phone !== undefined) {
       updates.push(`phone = $${idx++}`);
-      values.push(String(phone).trim());
+      values.push(phone ? normalizePhone(phone) : null);
     }
     if (event_name !== undefined) {
       updates.push(`event_name = $${idx++}`);
@@ -66,7 +87,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     values.push(id);
-    const res = await queryDb(`UPDATE event_reservations SET ${updates.join(", ")} WHERE id = $${idx} RETURNING *`, values);
+    const res = await queryDb(
+      `UPDATE event_reservations SET ${updates.join(", ")} 
+       WHERE id = $${idx} 
+         AND (volunteer_commitment IS NULL OR volunteer_commitment = '' OR volunteer_commitment = 'none' OR volunteer_commitment = 'attendee') 
+       RETURNING *`,
+      values
+    );
     return NextResponse.json({ ok: true, reservation: res.rows[0] });
   } catch (err: any) {
     console.error("PATCH /api/reservations/[id] error:", err);
@@ -79,12 +106,19 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const admin = await getAdminFromRequest(req);
-  if (!admin) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  const auth = await verifyAdminPermission(req, "submissions", "delete");
+  if (!auth.authorized) {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
 
   try {
     const { id } = await params;
-    await queryDb("DELETE FROM event_reservations WHERE id = $1", [id]);
+    await queryDb(
+      `DELETE FROM event_reservations 
+       WHERE id = $1 
+         AND (volunteer_commitment IS NULL OR volunteer_commitment = '' OR volunteer_commitment = 'none' OR volunteer_commitment = 'attendee')`,
+      [id]
+    );
     return NextResponse.json({ ok: true, id });
   } catch (err: any) {
     console.error("DELETE /api/reservations/[id] error:", err);

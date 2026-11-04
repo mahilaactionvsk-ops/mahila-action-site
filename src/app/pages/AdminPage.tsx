@@ -13,6 +13,7 @@ import {
   getRoleById,
   type AdminUser,
   type AdminModule,
+  UNAUTHENTICATED_ADMIN_USER,
 } from "@/lib/permissions";
 import {
   Inbox,
@@ -31,8 +32,12 @@ import {
   AlertTriangle,
   Lock,
   Trash2,
+  HeartHandshake,
+  Eye,
 } from "lucide-react";
+import { type Page } from "../components/shared/styleHelpers";
 import { SubmissionsAdmin } from "@/app/admin/SubmissionsAdmin";
+import { DonationsAdmin } from "@/app/admin/DonationsAdmin";
 import { ContentTypeBuilderAdmin } from "@/app/admin/ContentTypeBuilderAdmin";
 import { EventsAdmin } from "@/app/admin/EventsAdmin";
 import { BlogPostsAdmin } from "@/app/admin/BlogPostsAdmin";
@@ -50,6 +55,7 @@ import { AdminSidebar } from "@/app/admin/AdminSidebar";
 
 const CUSTOM_TABS = [
   { id: "submissions", label: "Form Submissions & Applications", icon: Inbox },
+  { id: "donations", label: "Donations & Contributions", icon: HeartHandshake },
   { id: "events", label: "Upcoming Events", icon: Calendar },
   { id: "stories", label: "Community Stories", icon: BookOpen },
   { id: "impactStories", label: "Our Impact Pages", icon: Sparkles },
@@ -70,21 +76,66 @@ export function AdminPage({
   siteData,
   onSiteDataChange,
 }: {
-  onExit: () => void;
+  onExit: (targetPage?: Page) => void;
   onContentSaved: (c: ContentMap) => void;
   siteData: SiteData;
   onSiteDataChange: (d: SiteData) => void;
 }) {
   const existing = useContent();
-  const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
+  const [loggedIn, setLoggedIn] = useState<boolean | null>(() => {
+    if (typeof window !== "undefined" && sessionStorage.getItem("admin_jwt")) {
+      return true;
+    }
+    return null;
+  });
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [signingIn, setSigningIn] = useState(false);
   const [draft, setDraft] = useState<ContentMap>({ ...existing });
   const [saving, setSaving] = useState(false);
-  const [activeSection, setActiveSection] = useState<string>("submissions");
+  const [activeSection, setActiveSection] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tabFromUrl = urlParams.get("tab") || urlParams.get("section");
+      if (tabFromUrl && CUSTOM_TABS.some((t) => t.id === tabFromUrl)) {
+        return tabFromUrl;
+      }
+      try {
+        const savedTab = localStorage.getItem("mahila_admin_active_tab");
+        if (savedTab && CUSTOM_TABS.some((t) => t.id === savedTab)) {
+          return savedTab;
+        }
+      } catch {}
+    }
+    return "submissions";
+  });
   const [currentAdminUser, setCurrentAdminUser] = useState<AdminUser>(() => getCurrentAdminSession());
   const [trashCount, setTrashCount] = useState<number>(() => getTrashItems().length);
+
+  useEffect(() => {
+    if (!activeSection || typeof window === "undefined") return;
+    try {
+      localStorage.setItem("mahila_admin_active_tab", activeSection);
+      const url = new URL(window.location.href);
+      if (url.searchParams.get("tab") !== activeSection) {
+        url.searchParams.set("tab", activeSection);
+        window.history.replaceState({}, "", url.toString());
+      }
+    } catch {}
+  }, [activeSection]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handlePopState = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const tab = urlParams.get("tab") || urlParams.get("section");
+      if (tab && CUSTOM_TABS.some((t) => t.id === tab)) {
+        setActiveSection(tab);
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   useEffect(() => {
     function syncTrash() {
@@ -117,6 +168,8 @@ export function AdminPage({
       if (isLoggedIn) {
         setDraft({ ...existing });
         setCurrentAdminUser(getCurrentAdminSession());
+      } else {
+        setCurrentAdminUser(UNAUTHENTICATED_ADMIN_USER);
       }
     });
 
@@ -144,6 +197,7 @@ export function AdminPage({
         await signOutAdmin();
         clearAdminSession();
         setLoggedIn(false);
+        setCurrentAdminUser(UNAUTHENTICATED_ADMIN_USER);
         toast.error("Signed out automatically after 5 minutes of inactivity");
         onExit();
       }, INACTIVITY_LIMIT_MS);
@@ -157,7 +211,28 @@ export function AdminPage({
       clearTimeout(timer);
       activityEvents.forEach((ev) => window.removeEventListener(ev, resetTimer));
     };
-  }, [loggedIn]);
+  }, [loggedIn, onExit]);
+
+  const visibleTabs = useMemo(() => {
+    return CUSTOM_TABS.filter((t) => {
+      if ((t as any).isSuperAdminOnly && currentAdminUser?.roleId !== "superadmin") {
+        return false;
+      }
+      return hasPermission(currentAdminUser, t.id as AdminModule, "view");
+    });
+  }, [currentAdminUser]);
+
+  const customTab = CUSTOM_TABS.find((t) => t.id === activeSection);
+  const isSuperOnly = Boolean((customTab as any)?.isSuperAdminOnly && currentAdminUser?.roleId !== "superadmin");
+  const hasViewAccess = !isSuperOnly && hasPermission(currentAdminUser, activeSection as AdminModule, "view");
+  const currentRole = getRoleById(currentAdminUser?.roleId);
+
+  useEffect(() => {
+    if (!loggedIn) return;
+    if (visibleTabs.length > 0 && !visibleTabs.some((t) => t.id === activeSection)) {
+      setActiveSection(visibleTabs[0].id);
+    }
+  }, [loggedIn, visibleTabs, activeSection]);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -172,6 +247,16 @@ export function AdminPage({
     setCurrentAdminUser(userSession);
     setLoggedIn(true);
     setDraft({ ...existing });
+
+    // Open "Form Submissions & Applications" immediately after fresh login
+    setActiveSection("submissions");
+    try {
+      localStorage.setItem("mahila_admin_active_tab", "submissions");
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", "submissions");
+      window.history.replaceState({}, "", url.toString());
+    } catch {}
+
     const userRole = getRoleById(userSession.roleId);
     toast.success(`Signed in as ${userRole.name}`);
   }
@@ -179,7 +264,16 @@ export function AdminPage({
   async function handleLogout() {
     await signOutAdmin();
     clearAdminSession();
+    try {
+      sessionStorage.setItem("mahila_admin_active_tab", "submissions");
+      localStorage.setItem("mahila_admin_active_tab", "submissions");
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", "submissions");
+      window.history.replaceState({}, "", url.toString());
+    } catch {}
+    setActiveSection("submissions");
     setLoggedIn(false);
+    setCurrentAdminUser(UNAUTHENTICATED_ADMIN_USER);
     toast("Signed out");
     onExit();
   }
@@ -228,7 +322,7 @@ export function AdminPage({
             <button type="submit" disabled={signingIn} className="w-full bg-[#a65a4a] text-[#f4efe7] font-['Inter',sans-serif] font-semibold text-[15px] py-3 rounded-full hover:bg-[#993925] transition-colors cursor-pointer mt-2 disabled:opacity-60">
               {signingIn ? "Signing in…" : "Sign In"}
             </button>
-            <button type="button" onClick={onExit} className="w-full text-[#1e1e1e]/50 font-['Inter',sans-serif] text-[13px] cursor-pointer hover:text-[#a65a4a] transition-colors">
+            <button type="button" onClick={() => onExit()} className="w-full text-[#1e1e1e]/50 font-['Inter',sans-serif] text-[13px] cursor-pointer hover:text-[#a65a4a] transition-colors">
               ← Back to website
             </button>
           </form>
@@ -237,17 +331,6 @@ export function AdminPage({
     );
   }
 
-  const visibleTabs = CUSTOM_TABS.filter((t) => {
-    if ((t as any).isSuperAdminOnly && currentAdminUser.roleId !== "superadmin") {
-      return false;
-    }
-    return hasPermission(currentAdminUser, t.id as AdminModule, "view");
-  });
-
-  const hasViewAccess = hasPermission(currentAdminUser, activeSection as AdminModule, "view");
-  const customTab = CUSTOM_TABS.find(t => t.id === activeSection);
-  const currentRole = getRoleById(currentAdminUser.roleId);
-
   function updateSiteData(patch: Partial<SiteData>) {
     onSiteDataChange({ ...siteData, ...patch });
   }
@@ -255,22 +338,22 @@ export function AdminPage({
   return (
     <main className="h-full w-full overflow-hidden bg-[#f0ebe3] flex flex-col">
       {/* Admin Header Bar */}
-      <div className="bg-[#a65a4a] px-3 sm:px-6 py-3 sm:py-4 flex items-center justify-between z-10 shadow-md shrink-0">
+      <div className="bg-[#a65a4a] px-3 sm:px-6 py-2.5 sm:py-3.5 flex items-center justify-between z-10 shadow-md shrink-0">
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <LogoMark invert />
           <div className="hidden xs:block">
-            <p className="font-['Fraunces',serif] text-[#f4efe7] text-[16px] sm:text-[18px] font-semibold" style={{ fontVariationSettings: '"SOFT" 0, "WONK" 1' }}>Admin Panel</p>
+            <p className="font-['Fraunces',serif] text-[#f4efe7] text-[15px] sm:text-[18px] font-semibold" style={{ fontVariationSettings: '"SOFT" 0, "WONK" 1' }}>Admin Panel</p>
             <p className="font-['Inter',sans-serif] text-[#f4efe7]/65 text-[10px] sm:text-[11px] hidden sm:block">Changes go live immediately after saving</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-3">
-          <div className="flex items-center gap-2 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full bg-[#f4efe7]/15 border border-[#f4efe7]/30 text-[#f4efe7] text-[12px]">
+        <div className="flex items-center gap-1.5 sm:gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-[#f4efe7]/15 border border-[#f4efe7]/30 text-[#f4efe7] text-[11px] sm:text-[12px]">
             <div className="w-5 sm:w-6 h-5 sm:h-6 rounded-full bg-[#f4efe7] text-[#a65a4a] font-bold text-[10px] sm:text-[11px] flex items-center justify-center shrink-0">
               {currentAdminUser.name.charAt(0).toUpperCase()}
             </div>
-            <div className="hidden md:flex items-center gap-2">
-              <span className="font-medium">{currentAdminUser.name}</span>
+            <div className="hidden sm:flex items-center gap-2">
+              <span className="font-medium max-w-[90px] md:max-w-none truncate">{currentAdminUser.name}</span>
               <span className="px-2 py-0.5 rounded-full text-[10px] uppercase font-bold bg-[#f4efe7] text-[#a65a4a]">
                 {currentRole.name}
               </span>
@@ -279,27 +362,51 @@ export function AdminPage({
 
           {isDirty && (
             <span className="bg-amber-300 text-amber-950 font-['Inter',sans-serif] text-[10px] sm:text-[11px] font-bold px-2 sm:px-3 py-0.5 sm:py-1 rounded-full animate-pulse flex items-center gap-1">
-              <AlertTriangle className="w-3.5 h-3.5" /> Unsaved
+              <AlertTriangle className="w-3.5 h-3.5" /> <span className="hidden xs:inline">Unsaved</span>
             </span>
           )}
           <button
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 font-['Inter',sans-serif] border border-[#f4efe7]/40 text-[#f4efe7] text-[11px] sm:text-[13px] px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full hover:bg-[#f4efe7]/10 transition-colors cursor-pointer whitespace-nowrap"
+            type="button"
+            onClick={handleSave}
+            disabled={saving}
+            className={`flex items-center gap-1 sm:gap-1.5 font-['Inter',sans-serif] text-[11px] sm:text-[13px] px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full font-semibold transition-all cursor-pointer disabled:opacity-60 whitespace-nowrap ${
+              isDirty
+                ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-md ring-2 ring-emerald-300 animate-pulse"
+                : "bg-[#f4efe7]/20 hover:bg-[#f4efe7]/30 text-[#f4efe7] border border-[#f4efe7]/40"
+            }`}
+            title="Save all changes and publish live to website"
           >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
+            <Globe className="w-3.5 h-3.5 shrink-0" />
+            <span>{saving ? "Publishing..." : isDirty ? <><span className="hidden sm:inline">Publish </span>Changes</> : <><span className="hidden sm:inline">Saved &amp; </span>Published</>}</span>
           </button>
           <button
-            onClick={onExit}
-            className="flex items-center gap-1.5 font-['Inter',sans-serif] border border-[#f4efe7]/40 text-[#f4efe7] text-[11px] sm:text-[13px] px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full hover:bg-[#f4efe7]/10 transition-colors cursor-pointer whitespace-nowrap"
+            onClick={handleLogout}
+            className="flex items-center gap-1 sm:gap-1.5 font-['Inter',sans-serif] border border-[#f4efe7]/40 text-[#f4efe7] text-[11px] sm:text-[13px] px-2 sm:px-4 py-1.5 sm:py-2 rounded-full hover:bg-[#f4efe7]/10 transition-colors cursor-pointer whitespace-nowrap"
+            title="Sign Out"
           >
-            <Globe className="w-3.5 h-3.5" />
-            <span>Site</span>
+            <LogOut className="w-3.5 h-3.5 shrink-0" />
+            <span className="hidden xs:inline">Sign Out</span>
+          </button>
+          <button
+            onClick={() => {
+              let targetPage: Page = "home";
+              if (activeSection === "events" || activeSection === "eventsBlog") targetPage = "eventsBlog";
+              else if (activeSection === "stories" || activeSection === "impactStories" || activeSection === "categories") targetPage = "stories";
+              else if (activeSection === "donations") targetPage = "donate";
+              else if (activeSection === "contact") targetPage = "contact";
+              else if (activeSection === "timeline" || activeSection === "councilors") targetPage = "about";
+              onExit(targetPage);
+            }}
+            className="flex items-center gap-1.5 font-['Inter',sans-serif] bg-amber-400/20 hover:bg-amber-400/30 text-[#f4efe7] border border-amber-300/40 text-[11px] sm:text-[13px] px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all cursor-pointer whitespace-nowrap shadow-xs font-medium"
+            title="Observe live website as visitors see it — return anytime via the observation toolbar"
+          >
+            <Eye className="w-3.5 h-3.5 shrink-0 text-amber-300" />
+            <span>Observe Live Site</span>
           </button>
         </div>
       </div>
 
-      <div className="flex flex-1 min-h-0 h-full overflow-hidden">
+      <div className="flex flex-col md:flex-row flex-1 min-h-0 h-full overflow-hidden">
         <AdminSidebar
           visibleTabs={visibleTabs}
           activeSection={activeSection}
@@ -308,7 +415,7 @@ export function AdminPage({
         />
 
         {/* Main Content Area */}
-        <div className="flex-1 h-full min-h-0 overflow-y-auto p-6 md:p-8">
+        <div className="flex-1 h-full min-h-0 overflow-y-auto p-4 sm:p-6 md:p-8">
           <div className="flex items-center gap-3 mb-6">
             {customTab?.icon && (
               <div className="w-10 h-10 rounded-xl bg-[#a65a4a]/10 text-[#a65a4a] flex items-center justify-center shadow-xs">
@@ -338,7 +445,7 @@ export function AdminPage({
                 </button>
               ) : (
                 <button
-                  onClick={onExit}
+                  onClick={() => onExit()}
                   className="mt-5 px-5 py-2.5 bg-[#a65a4a] text-white text-[13px] font-semibold rounded-full hover:bg-[#993925] transition-colors cursor-pointer"
                 >
                   ← Back to Website
@@ -352,6 +459,9 @@ export function AdminPage({
               )}
               {activeSection === "submissions" && (
                 <SubmissionsAdmin />
+              )}
+              {activeSection === "donations" && (
+                <DonationsAdmin />
               )}
               {activeSection === "contentTypeBuilder" && (
                 <ContentTypeBuilderAdmin />
@@ -410,3 +520,5 @@ export function AdminPage({
     </main>
   );
 }
+// Events admin with standalone overview table & 3-dots actions menu
+

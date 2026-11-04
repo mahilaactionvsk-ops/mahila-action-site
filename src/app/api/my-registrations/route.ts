@@ -28,9 +28,20 @@ export async function GET(req: NextRequest) {
     }
     if (phone) {
       // Normalise phone: strip spaces so "+91 70955 48387" matches "+917095548387"
-      const normPhone = phone.replace(/\s+/g, "");
+      const normPhone = phone.trim().replace(/\s+/g, "");
+      const digitsOnly = phone.replace(/\D/g, "");
+      const phoneSubConditions: string[] = [];
+
       params.push(normPhone);
-      conditions.push(`REPLACE(phone, ' ', '') = $${params.length}`);
+      phoneSubConditions.push(`REPLACE(phone, ' ', '') = $${params.length}`);
+
+      if (digitsOnly.length >= 10) {
+        const last10 = digitsOnly.slice(-10);
+        params.push(`%${last10}`);
+        phoneSubConditions.push(`REPLACE(REPLACE(phone, ' ', ''), '-', '') LIKE $${params.length}`);
+      }
+
+      conditions.push(`(${phoneSubConditions.join(" OR ")})`);
     }
 
     const where = conditions.join(" OR ");
@@ -51,7 +62,19 @@ export async function GET(req: NextRequest) {
       params
     );
 
-    return NextResponse.json([...result.rows, ...permResult.rows]);
+    const donationsResult = await queryDb(
+      `SELECT id, amount, name, email, phone, donation_type, anonymous, event_name, campaign_name, status, pan_number, address, payment_method, transaction_id, receipt_number, created_at, 'donation' AS item_source
+       FROM donations
+       WHERE ${where}
+       ORDER BY created_at DESC`,
+      params
+    );
+
+    const allRows = [...result.rows, ...permResult.rows, ...donationsResult.rows].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    return NextResponse.json(allRows);
 
   } catch (err: any) {
     console.error("GET /api/my-registrations error:", err);
